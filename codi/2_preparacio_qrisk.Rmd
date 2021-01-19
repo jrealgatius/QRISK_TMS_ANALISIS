@@ -1,0 +1,453 @@
+---
+title: "Predicció del risc cardiovascular mitjançant dos escales en pacients  amb trastorn mental sever: estudi de cohorts retrospectiu" 
+author: "Jordi Real" 
+website: "https://github.com/USR-DAPCAT/"
+date: "`r format(Sys.time(), '%d %B, %Y')`" 
+
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+    fig_caption: true
+    css: logos_css/usr_styles.css
+
+params:
+  fitxers_test: TRUE
+
+---
+
+&nbsp;
+<script>
+   $(document).ready(function() {
+     $head = $('#header');
+     $head.prepend('<img src=\"https://www.idiapjgol.org/images/logo.png\" style=\"float: right ;width: 130px;\"/>')
+     $head.prepend('<img src=\"https://avatars2.githubusercontent.com/u/57066591?s=200&v=4\" style=\"text-align: center;margin:auto;width: 80px;\"/>')
+   });
+</script>
+
+
+<div class="watermark">DRAFT</div>
+
+****
+
+# Objectiu
+
+## Principal
+
+- Estudiar si l’estimació del risc cardiovascular mitjançant les escales QRISK3 i REGICOR en la població TMS prediu l’aparició d’esdeveniments cardiovasculars i avaluar les diferències entre les dues escales.
+
+# Estat
+
+## Actualizaciones 
+
+> Octubre/2020 
+
+&check; Es descarta aparellament dirigint analisis objectiu principal 
+&check; Es descarta aparellament dirigint analisis objectiu principal 
+
+
+## Fet: 
+
+> Septembre/2020 
+
+&check; Recalcular fàrmacs dispensats: Les N són iguals per a tots els fàrmacs. Pendent revisar  <br/>
+&check; Veure % de pacients TMS (total població) que tenen calculat el QRISK  <br/>
+&check; Fer aparellament (selecció no TMS)  <br/>
+
+Aparellament segons protocol: 
+- Edat, sexe, metge assignat i centre de referència amb una proporció de casos i controls de 1:2 
+- Pacient haurà de constar com actiu a la data d’inclusió del TMS 
+
+- S'aparella per densitat d'incidencia 
+- Codi únic per professional 
+
+
+> 20-28/07/2020
+
+&check; Cortis: Cal que sigui prescripció crònica: 6 mesos o més de prescripció o bé 6 envasos en l’últim any abans de la inclusió  <br/>
+&check; Diabetis: Els que són DM que no estan classificats ni com tipus I ni com tipus II (DM_ALTRES només condicionat a fàrmacs antidiabètics), cal classificar-los com a tipus II  <br/>
+
+&check; Actualització de resultats  <br/>
+
+&check; Taules comparatives per tipus de TMS <br/>
+
+
+> 6/07/2020
+
+&check; Llistat de pacients TMS amb info QRISK  <br/>
+&check; Descriptiva - comparativa de grups <br/>
+
+
+> 26/06/2020
+
+&check; Aplicar exclusions <br/>
+&check; Etiquetar variables <br/>
+&check; Depuració rang de valors vàlids (recode_to_missings) <br/>
+&check; Descriptiva - comparativa de grups <br/>
+
+
+>09/06/2020
+
+&check; Revisar diagnostic DM <br/>
+&check; Calcular Malaltia renal crònica en funció de CKDEPI  <br/>
+&check; Actualitzar QRISK en funció de   <br/>
+&check; Calcular SD de PAS (Últim any)    <br/>
+&check; Classificació de TMS segons seguiment <br/>
+&check; Actualització de resultats <br/>
+
+> 07/06/2020
+
+&check; Generada data d'inclusió (dtindex) segons determinació Regicor / Qrisk més propera (2007-2010)  <br/>
+&check; Càlcul regicor  <br/>
+&check; Càlcul QRISK  <br/>
+&check; Nova agregació  <br/>
+
+>
+
+&check; Afegits nous agregadors <br/>
+&check; Lectura de fitxers <br/>
+&check; Generació de conductors  <br/> 
+&check; Agregació <br/>
+&check; Exploratori <br/>
+
+
+```{r include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, include=F,size="huge")
+
+# Lectura de dades     
+
+library(lubridate)
+library(compareGroups)
+library(QRISK3)
+library(flexdashboard)
+library(DT)
+
+
+link_source<-paste0("https://github.com/jrealgatius/Stat_codis/blob/master/funcions_propies.R","?raw=T")
+devtools::source_url(link_source)
+
+conductor_variables<-here::here("variables_qrisk.xls")
+
+
+```
+
+
+
+```{r}
+
+if (params$fitxers_test) fitxer_dades<-"dades_test_crues.Rds" else fitxer_dades<-"dades_crues.Rds"
+
+dades<-readRDS(here::here("dades",fitxer_dades))
+
+
+```
+
+
+```{r}
+#   Recode farmacs basals ---------
+
+
+# >0 --> 1 (Else=0) 
+dades<-dades %>% mutate_at(vars(starts_with("FD.")), 
+                         funs(if_else(.>0,1,0,missing = 0))) 
+
+# NA --> 0 (Else=1) (No hi ha 0)
+dades<-dades %>% mutate_at(vars(starts_with("FP.")), 
+                         funs(if_else(.>0,1,0,missing = 0))) 
+
+
+#   Recode diagnostics basals ---------
+# NA --> 0 (Else=1) (No hi ha 0)
+dades<-dades %>% mutate_at(vars(starts_with("DG.")), 
+                           funs(ifelse(is.na(.) | 0,0,1))) 
+
+#   Edat ------------
+dades<-dades %>% 
+  mutate(edat = time_length(interval(ymd(dnaix), ymd(dtindex)),"year") %>% round(2))
+
+
+# Any inclusió --------------  
+dades<-dades %>% mutate(any_inclusio=year(ymd(dtindex)))
+
+
+# diabetes en funció de diagnostic o antidiabetics
+dades<-dades %>% mutate (DG.DM=if_else(FD.DM>0 | FP.DM>0 | DG.DM==1,1,0,missing = 0))
+
+# En cas de Altres antidiabetics + Farmacs antidiabetics DG (DG.DM_Altres) ES DM2 
+dades<-dades %>% mutate (DG.DM=if_else(DG.DM_Altres==1 & (FD.DM==1 | FP.DM),1,DG.DM)) 
+
+# Malaltia  renal crònica (estadiatge III, IV o V) i malaltia renal crònica major (sí/no)
+dades<-dades %>% mutate(DG.MRNC=if_else(CKDEPI.valor<60 | DG.MRNC==1,1,0,missing=0))
+
+# cholesterol_HDL_ratio=COLTOT.valor/COLHDL.valor
+
+dades<-dades %>% mutate(cholesterol_HDL_ratio=COLTOT.valor/COLHDL.valor)
+
+# Recode to Missings
+dades<-dades %>% recode_to_missings(conductor_variables,rang = "rang_valid")
+
+# grups d'edat
+dades<-dades %>% recodificar(conductor_variables,criteris = "recode")
+
+table(dades$edat.cat7)
+
+```
+
+
+
+```{r}
+# Calcul de Regicor ------
+
+# Preparo base de dades
+
+# age: númerica (anys)
+# sex: text, 'H'  homes i 'D' dones
+# smoker, diabetes: binària (0 no i 1 si)
+# coltot i colhdl: en mg/dL
+# sbp i dbp: númeric (mmHg)
+
+dades_regicor<-dades %>% transmute(age=edat,
+                                   sex=sexe,
+                                   diabetes=DG.DM,
+                                   smoker=if_else(tabac.valor==1,1,0,missing = 0),
+                                   coltot=COLTOT.valor,
+                                   colhdl=COLHDL.valor,
+                                   sbp=PAS.valor,dbp=PAD.valor)
+
+# Aplico formula i ho fuciono a dades
+temp<-dades_regicor
+
+regicor_df<-
+  temp %>% mutate(regicor=regicor(age=age,sex=sex,smoker=smoker,diabetes=diabetes,coltot=coltot,colhdl=colhdl,sbp=sbp,dbp=dbp)) %>% 
+  select(regicor)
+
+dades<-dades %>% bind_cols(regicor_df)
+rm(temp,regicor_df)
+
+
+```
+
+## Equació de risc QRISK
+
+```{r, echo=TRUE,include=TRUE}
+# Calcul del Qrisk
+
+# selectorvariables("QRISK",conductor_variables,dades)
+
+
+dades_qrisk <-dades %>% transmute(patid=idp,
+                                  gender=if_else(sexe=="D",1,0),
+                                  age=edat,
+                                  atrial_fibrillation=DG.FA,
+                                  
+                                  atypical_antipsy=if_else(FP.APSIC_ATIPIC>0 | FD.APSIC_ATIPIC>0,1,0,missing = 0),
+                                  regular_steroid_tablets=if_else(FD.G_CORT>0 | FP.G_CORT>0,1,0,missing = 0),
+                                  
+                                  erectile_disfunction=DG.DIS_ERE,
+                                  migraine=DG.MIGRANYA,
+                                  rheumatoid_arthritis=DG.AR,
+                                  chronic_kidney_disease=DG.MRNC, # DG.MRNC=if_else(CKDEPI.valor<60 | DG.MRNC==1,1,0,missing=0)
+                                  severe_mental_illness=DG.TMS,
+                                  systemic_lupus_erythematosis=DG.LUPUS,
+                                  
+                                  blood_pressure_treatment=if_else((FD.HTA>0 | FP.HTA>0) & DG.HTA==1,1,0,missing = 0), # condicionat a DG.HTA
+                                  
+                                  diabetes1=DG.DMI,
+                                  diabetes2=DG.DMII,
+                                  weight=PES.valor,
+                                  height=TALLA.valor,
+
+                                  heart_attack_relative=DG.ANT_FAM,
+                                  
+                                  cholesterol_HDL_ratio=COLTOT.valor/COLHDL.valor,
+                                  systolic_blood_pressure=PAS.valor,
+                                  smoke=case_when(tabac.valor==0~1,tabac.valor==1~4,tabac.valor==2~2),
+                                  townsend=1,
+                                  ethiniciy=1,
+                                  std_systolic_blood_pressure=PAS_sd)
+                                
+
+
+# Agafar dades completes (Sense missings)
+dades_qrisk<-na.omit(dades_qrisk)
+# Age of patients must be between 25 and 84
+dades_qrisk<-dades_qrisk %>% filter(age>25 & age<84)
+
+dades_temp<-dades_qrisk
+
+
+dades_qrisk<-
+  QRISK3::QRISK3_2017(
+                  data=dades_qrisk,
+                  patid="patid",
+                  gender="gender",
+                  age="age",
+                  atrial_fibrillation="atrial_fibrillation",
+                  atypical_antipsy="atypical_antipsy",
+                  regular_steroid_tablets="regular_steroid_tablets",
+                  erectile_disfunction="erectile_disfunction",
+                  migraine="migraine",
+                  rheumatoid_arthritis="rheumatoid_arthritis",
+                  chronic_kidney_disease="chronic_kidney_disease",
+                  severe_mental_illness="severe_mental_illness",
+                  systemic_lupus_erythematosis="systemic_lupus_erythematosis",
+                  blood_pressure_treatment="blood_pressure_treatment",
+                  diabetes1="diabetes1",
+                  diabetes2="diabetes2",
+                  weight="weight",
+                  height="height",
+                  heart_attack_relative="heart_attack_relative",
+                  cholesterol_HDL_ratio="cholesterol_HDL_ratio",
+                  systolic_blood_pressure="systolic_blood_pressure",
+                  smoke="smoke",
+                  townsend="townsend",
+                  ethiniciy="ethiniciy",
+                  std_systolic_blood_pressure="std_systolic_blood_pressure")
+
+
+# dades_qrisk  
+
+# Fusionar amb dades 
+
+dades<-dades %>% left_join(dades_qrisk,by=c("idp"="patid"))
+
+
+# LLista de casos
+dades %>% select(extreure.variables("QRISK",conductor_variables)) %>% filter(QRISK3_2017_1digit>0) %>% head(5) %>% datatable()
+
+dades %>% select(extreure.variables("QRISK",conductor_variables)) %>% filter(QRISK3_2017_1digit>0 & DG.TMS==1) %>% head(5) %>% datatable(caption="Pacients TMS")
+
+
+
+```
+
+
+
+
+
+
+```{r}
+# FActoritzar ----------------------
+
+dades<-factoritzar.NO.YES(dades,columna = "factoritzar.yes.no",taulavariables = conductor_variables)
+
+
+```
+
+# Exclusions I
+
+> Flow Chart
+
+```{r, include=TRUE}
+# Elimino exitus en dataindex
+dades<-dades %>% filter (!(situacio=="D" & sortida<=dtindex)) 
+
+# Faig copia dades preexclusions
+dades_preexclusions<-dades %>% select(extreure.variables("ordre",conductor_variables,dt=dades))
+
+criteris_exclusio_diagrama(dades,conductor_variables,criteris = "exclusio1",etiquetes = "lab_exc",ordre="ordre",sequencial = F)
+
+
+
+```
+
+```{r}
+
+dades<-criteris_exclusio(dades,conductor_variables,criteris = "exclusio1")
+
+
+
+dades<-etiquetar(dades,conductor_variables,camp_descripcio = "descripcio")
+
+```
+
+# Aparellament per densitat de incidencia
+
+Algoritme RiskSetMatch
+
+Aparellament segons protocol: 
+- Edat (Any de naixament), sexe, metge assignat (i centre de referència*) amb una proporció de casos i controls de 1:2 
+- Pacient haurà de constar com actiu a data d’inclusió del TMS
+
+* Codi únic per professional 
+
+
+```{r}
+# Preparar dades per matxejar 
+dades<-dades %>% mutate(yearnaix=stringr::str_sub(dnaix,1,4),dtindex,yearindex=stringr::str_sub(dtindex,1,4),DG.TMS,grup=ifelse(DG.TMS=="Yes",1,0))
+
+# library(heaven, versio=2018.08.09)
+
+llistaPS<-c("sexe","yearnaix","yearindex","idprof")
+num_controls<-2
+
+dt_matching<-dades %>% select(idp,grup,sortida,dtindex,llistaPS)
+
+
+# Generar data de sortida (Data TMS / o Data de censura)     
+dt_matching<-dt_matching %>% mutate(dtindex_case=ifelse(grup==1, as.Date(as.character(dtindex),format="%Y%m%d"),NA)) 
+
+## dtindex_control
+dt_matching<-dt_matching %>% mutate (dtindex_control=as.Date(as.character(sortida),format="%Y%m%d")%>% as.numeric())
+
+
+
+# Algoritme matching 
+
+dades_match<-heaven::riskSetMatch(ptid="idp"                   # Unique patient identifier
+                                  ,event="grup"                # 0=Control, 1=case
+                                  ,terms=llistaPS              # terms c("n1","n2",...) - list of vairables to match by
+                                  ,dat=dt_matching              # dataset with all variables
+                                  ,Ncontrols=num_controls         # number of controls to provide
+                                  ,oldevent="oldevent"            # To distinguish cases used as controls
+                                  ,caseid="caseid"                # variable to group cases and controls (case-ptid)
+                                  ,reuseCases=F                   # T og F or NULL - can a case be a control prior to being a case?
+                                  ,reuseControls=F                # T or F or NULL - can controls be reused?
+                                  ,caseIndex="dtindex_case"       # Integer or date, date where controls must be prior
+                                  ,controlIndex="dtindex_control" # controlIndex - Index date for controls
+                                  ,NoIndex=FALSE                # If T ignore index
+                                  ,cores=1                      # Number of cores to use, default 1
+                                  ) 
+
+# Numero de controls per conjunt a risk 
+dades_match<-dades_match %>% as_tibble() %>% group_by(caseid) %>% mutate(n_match=n()-1) %>% ungroup()
+  
+
+# Filtre grups amb controls
+dades_match<-dades_match %>% mutate(incl_matching=if_else(n_match>=1,1,0,missing = 0)) 
+
+# Afegeixo info matching dels idp's matchejats caseid i n_match, incl_matching
+dades<-dades %>% left_join(select(dades_match,idp,caseid,n_match,incl_matching),by="idp") 
+
+dades<-dades %>% mutate(incl_matching=if_else(incl_matching==1,1,0,missing = 0)) 
+
+
+
+
+```
+
+# Prioritzacio TMS
+
+```{r}
+
+
+
+```
+
+
+# Salvar dades planes
+
+```{r}
+if (params$fitxers_test) fitxer_dades<-"dades_test.Rds" else fitxer_dades<-"dades.Rds"
+if (params$fitxers_test) fitxer_dades_preexclusions<-"dadestest_preexclusions.Rds" else  fitxer_dades_preexclusions<-"dades_preexclusions.Rds"
+
+saveRDS(dades,file = here::here("dades", fitxer_dades))
+saveRDS(dades_preexclusions,file = here::here("dades", fitxer_dades_preexclusions))
+
+
+
+
+```
+

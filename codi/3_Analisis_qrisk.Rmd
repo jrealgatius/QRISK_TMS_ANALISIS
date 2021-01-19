@@ -1,0 +1,932 @@
+---
+title: "Predicció del risc cardiovascular mitjançant dos escales en pacients  amb trastorn mental sever: estudi de cohorts retrospectiu"
+author: "Jordi Real" 
+website: "https://github.com/USR-DAPCAT/"
+date: "`r format(Sys.time(), '%d %B, %Y')`" 
+
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+    fig_caption: true
+    css: logos_css/usr_styles.css
+
+params:
+  fitxers_test: TRUE
+  subgrup: "NA"  # "NA" "DG.ALTRES_PSICOTICS" "DG.ESQUIZO" "DG.BIPOLAR_MANIA" "DG.ALTRES_PSICOTICS"
+
+subtitle: "`r params$subgrup`"
+
+---
+
+&nbsp;
+<script>
+   $(document).ready(function() {
+     $head = $('#header');
+     $head.prepend('<img src=\"https://www.idiapjgol.org/images/logo.png\" style=\"float: right ;width: 130px;\"/>')
+     $head.prepend('<img src=\"https://avatars2.githubusercontent.com/u/57066591?s=200&v=4\" style=\"text-align: center;margin:auto;width: 80px;\"/>')
+   });
+</script>
+
+
+<div class="watermark">DRAFT</div>
+
+****
+
+# Objectiu
+
+## Principal
+
+- Estudiar si l’estimació del risc cardiovascular mitjançant les escales QRISK3 i REGICOR en la població TMS prediu l’aparició d’esdeveniments cardiovasculars i avaluar les diferències entre les dues escales.
+
+# Estat
+
+## Actualizaciones 
+
+> Gener / 2020 
+
+&check; Agregació de variables: En periode finestra si en el període finestra hi ha més d’un valor, fer la mitjana dels valors que hi hagi <br/>
+&check; Grups d’edat: Els del Regicor: 35-44 / 45-54 / 55-64 / 65-74
+
+> Desembre / 2020 
+
+&check; Anàlisis d'historics de fármacs Antipsicotics en població no classificada de TMS <br/>
+&check; Models de regressió de COX ajustats <br/>
+
+
+> Novembre / 2020
+
+&check; Anàlisis descriptiu per subgrups d'edat <br/>
+&check; Taxa d'incidencia + IC per grups d'edat, sexe i Medea  <br/>
+&check; ROC i AUC i HR per event i sexe <br/>
+&check; Generar taules resum <br/>
+&check; Eliminar solapaments de TMS <br/>
+&check; Revisar càlcul de QRisk (Nacionalitat i Tabac) <br/>
+&check; Correlació Regicor calculat vs Regicor directe E-Cap <br/>
+&check; Establir rang de valors valids de variables numèriques: <br/>
+
+- Cholesterol/HDL ratio: 1.0-11.0 ; resta blank
+- SBP: 70-210
+- Standard deviation of SBP: 0.0- 40.0
+- Talla: 140-210
+- Pes: 40-180
+
+## Fet: 
+
+> Desembre /2020 
+
+&check; Descriptiva de pacients≤65 + tractament antipsicòtic sense diagnòstic TMS 
+
+
+> Novembre / 2020
+
+&check; Anàlisis de solapaments per subgrups TMS  <br/>
+&check; Comparació de models es seleccionen de dades completes en ambdos indicadors (Qrisk & Regicor)
+&check; Afegida curva ROC i AUC en la comparativa d'indicadors de discriminació(Qrisk & Regicor)
+
+> Octubre/2020 
+
+&check; Es descarta aparellament dirigint analisis objectiu principal <br/>
+&check; Característiques basals de la població TMS (global i per sexe)  <br/>
+&check; Taxes d’incidència de malaltia cardiovascular per 1000 persones-any (global i per sexe) <br/>
+&check; Hazard ratio ajustada de malaltia cardiovascular per QRISK3 i Regicor (global i per sexe)  <br/>
+&check; Comparar la capacitat de discriminació de cada model/escala (AIC, R2)  <br/>
+
+
+> Septembre/2020 
+
+&check; Recalcular fàrmacs dispensats: Les N són iguals per a tots els fàrmacs. Pendent revisar  <br/>
+&check; Veure % de pacients TMS (total població) que tenen calculat el QRISK  <br/>
+&check; Fer aparellament (selecció no TMS)  <br/>
+
+Aparellament segons protocol: 
+- Edat, sexe, metge assignat i centre de referència amb una proporció de casos i controls de 1:2 
+- Pacient haurà de constar com actiu a la data d’inclusió del TMS 
+
+- S'aparella per densitat d'incidencia 
+- Codi únic per professional 
+
+> 20-28/07/2020
+
+&check; Cortis: Cal que sigui prescripció crònica: 6 mesos o més de prescripció o bé 6 envasos en l’últim any abans de la inclusió  <br/>
+&check; Diabetis: Els que són DM que no estan classificats ni com tipus I ni com tipus II (DM_ALTRES només condicionat a fàrmacs antidiabètics), cal classificar-los com a tipus II  <br/>
+
+&check; Actualització de resultats  <br/>
+
+&check; Taules comparatives per tipus de TMS <br/>
+
+
+> 6/07/2020
+
+&check; Llistat de pacients TMS amb info QRISK  <br/>
+&check; Descriptiva - comparativa de grups <br/>
+
+
+> 26/06/2020
+
+&check; Aplicar exclusions <br/>
+&check; Etiquetar variables <br/>
+&check; Depuració rang de valors vàlids (recode_to_missings) <br/>
+&check; Descriptiva - comparativa de grups <br/>
+
+
+>09/06/2020
+
+&check; Revisar diagnostic DM <br/>
+&check; Calcular Malaltia renal crònica en funció de CKDEPI  <br/>
+&check; Actualitzar QRISK en funció de   <br/>
+&check; Calcular SD de PAS (Últim any)    <br/>
+&check; Classificació de TMS segons seguiment <br/>
+&check; Actualització de resultats <br/>
+
+> 07/06/2020
+
+&check; Generada data d'inclusió (dtindex) segons determinació Regicor / Qrisk més propera (2007-2010)  <br/>
+&check; Càlcul regicor  <br/>
+&check; Càlcul QRISK  <br/>
+&check; Nova agregació  <br/>
+
+> 03/2020
+
+&check; Afegits nous agregadors <br/>
+&check; Lectura de fitxers <br/>
+&check; Generació de conductors  <br/> 
+&check; Agregació <br/>
+&check; Exploratori <br/>
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, include=T,size="huge")
+
+# Lectura de dades     
+
+library(lubridate)
+library(compareGroups)
+library(QRISK3)
+library(flexdashboard)
+library(DT)
+
+
+link_source<-paste0("https://github.com/jrealgatius/Stat_codis/blob/master/funcions_propies.R","?raw=T")
+devtools::source_url(link_source)
+
+source(here::here("codi/global_lectura.R"))
+
+# Si fitxers_test  carrego fitxers mostra 
+funcions_lectura_dades(params$fitxers_test)
+
+conductor_variables<-here::here("variables_qrisk.xls")
+
+
+```
+
+
+```{r funcions}
+
+resum_events_v3<-function(dt=dadestotal,evento="RD",temps="temps",valorevent="Si") {
+  
+  # evento="EV.CVD"
+  # temps="EV.CVD_temps"
+  # valorevent=1
+  # dt=dades
+
+  est.rate<-function(ncas=evento,ntar=P_Years) {
+    pp<-epiR::epi.conf(as.matrix(cbind(ncas, ntar)), ctype = "inc.rate", method = "exact", N = 1000, design = 1, conf.level = 0.95) 
+    pp$est}
+
+  est.Linf<-function(ncas=evento,ntar=P_Years) {
+    pp<-epiR::epi.conf(as.matrix(cbind(ncas, ntar)), ctype = "inc.rate", method = "exact", N = 1000, design = 1, conf.level = 0.95) 
+    pp$lower}
+
+  est.Lsup<-function(ncas=evento,ntar=P_Years) {
+    pp<-epiR::epi.conf(as.matrix(cbind(ncas, ntar)), ctype = "inc.rate", method = "exact", N = 1000, design = 1, conf.level = 0.95) 
+    pp$upper}
+  
+
+  dt %>% summarise(Patients=n(),
+                   P_Years=sum(!!sym(temps)),
+                   Years_free_event_mean=mean(!!sym(temps)),
+                   Years_free_event_median=median(!!sym(temps) %>% as.numeric),
+                   N_events=sum(!!sym(evento)==valorevent),
+                   Event_rate_1000=((N_events/P_Years)*1000),
+                   Event_rate_IC95_inf=est.Linf(N_events,P_Years)*1000,
+                   Event_rate_IC95_sup=est.Lsup(N_events,P_Years)*1000,
+                   IA_100=(N_events/Patients)*100,
+                   IA_100_IC95_inf=est.Linf(N_events,Patients)*100,
+                   IA_100_IC95_sup=est.Lsup(N_events,Patients)*100
+
+                     )
+  }
+
+
+
+```
+
+
+# Lectura de dades
+
+```{r lectura}
+if (params$fitxers_test) fitxer_dades<-"dades_test.Rds" else fitxer_dades<-"dades.Rds"
+if (params$fitxers_test) fitxer_dades_preexclusions<-"dadestest_preexclusions.Rds" else fitxer_dades_preexclusions<-"dades_preexclusions.Rds"
+
+dades<-readRDS(here::here("dades",fitxer_dades))
+dades_preexclusions<-readRDS(here::here("dades",fitxer_dades_preexclusions))
+
+dt_codis_antisic<-read_conductor(here::here("cataleg_qrisk.xls")) %>% 
+  filter(agr=="APSIC") %>% 
+  select(cod,agr)
+
+# Lectura facturats i prescrits de 
+dt_facturats<-Inf %>% LLEGIR.FX.FACTURATS() 
+dt_prescrits<-Inf %>% LLEGIR.FX.PRESCRITS()
+
+dt_facturats_APSIC<-
+  dt_facturats %>% 
+  semi_join(dt_codis_antisic,by="cod") %>% 
+  semi_join(mutate(dades,idp=as.character(idp)),by="idp") 
+
+dt_prescrits_APSIC<-
+  dt_prescrits %>% 
+  semi_join(dt_codis_antisic,by="cod") %>% 
+  semi_join(mutate(dades,idp=as.character(idp)),by="idp") 
+
+rm(dt_facturats)
+rm(dt_prescrits)
+
+```
+
+
+
+# Diagrames d'exclusions 
+
+```{r diagrames}
+
+criteris_exclusio_diagrama(dades,conductor_variables,grups = "DG.TMS",criteris = "exclusio2",etiquetes = "descripcio",ordre="ordre",sequencial = F)
+
+criteris_exclusio_diagrama(dades_preexclusions,conductor_variables,criteris = "exclusio1",ordre="ordre",etiquetes = "lab_exc",sequencial = F)
+
+
+
+```
+
+```{r preparacio}
+
+
+# Preparació residual ECV i temps
+
+# Event CVD 
+dades<-dades %>% mutate(EV.CVD=pmin(EV.CI,EV.AVC_ISQ,EV.AIT,na.rm = T))
+
+# Calculo variable temps lliure d'EVENT i dicotomitzo variables event
+dades<-
+  dades %>% mutate_at(vars(starts_with("EV.")),list("temps"=~((ymd(.)-ymd(dtindex)) %>% as.numeric))) %>% 
+          mutate_at(vars(ends_with("_temps")),~if_else(is.na(.),(ymd(sortida)-ymd(dtindex)) %>% as.numeric,.)) %>%
+          mutate_at(vars(ends_with("_temps")),~./365.25) %>%
+          mutate_at(vars(starts_with("EV.") & !ends_with("_temps")),~if_else(.>0,1,0,missing = 0))
+
+# Verificació
+# dades %>% select(extreure.variables("events",conductor_variables))
+
+# Exitus durant seguiment
+dades<-dades %>% mutate(exitus=if_else(situacio=="D",1,0))
+
+
+# Generar variable que computi combinacions de variables 
+
+dades<-
+  comptar_valors(dades,variables =extreure.variables("TMS",conductor_variables),"Yes") %>% 
+  rename(N_TMS=num_valors)
+
+
+```
+
+# 1 Exploratori
+
+## 1.1. Descriptiva Antipsicotics (Facturats o prescrits en qualsevol moment) en PACIENTS NO TMS 
+
+```{r}
+dt_NOTMS<-dades %>% filter(DG.TMS=="No")
+
+dt_APSIC_resum<-
+  dt_facturats_APSIC %>% group_by(idp) %>% slice(1) %>% ungroup() %>% mutate(FX_APSIC=1) %>% select(idp,FX_APSIC)
+
+dt_APSIC_resum<-
+  dt_prescrits_APSIC %>% group_by(idp) %>% slice(1) %>% ungroup() %>% mutate(FX_APSIC=1) %>% select(idp,FX_APSIC) %>% 
+  bind_rows(dt_APSIC_resum) %>% 
+  group_by(idp) %>% slice(1) %>% ungroup()
+
+
+# Fusionar algun Antipsicotic 
+dt_NOTMS<-dt_NOTMS %>% 
+  mutate(idp=as.character(idp)) %>% 
+  left_join(dt_APSIC_resum,by="idp") %>% 
+  mutate(FX_APSIC=if_else(FX_APSIC==1,1,0,missing = 0))
+
+
+formu<-formula.text("TMS",y="FX_APSIC",taulavariables =  conductor_variables)
+formu
+
+
+dt_NOTMS<-dt_NOTMS %>% 
+  mutate(edad=as.numeric((ymd(dtindex)-ymd(dnaix))/365.25)) %>% 
+  mutate(edad_grup=if_else(edad>65,"Major 65 anys","Menor o igual 65 anys "))
+
+### Descriptiva dates 
+dt_codis_antisic %>% distinct(cod) %>% kable(caption = "Llistat de codis inclosos") %>% kableExtra::kable_styling()
+
+dt_prescrits_APSIC %>% semi_join(dt_NOTMS,by="idp") %>% 
+  summarise(N_patients=n_distinct(idp),min(dat),max(dat), N_patients=n_distinct(idp)) %>% kable(caption = "Dates d'històric de prescripcions d'antipsicotics de codis inclosos") %>% kableExtra::kable_styling()
+
+dt_facturats_APSIC %>% semi_join(dt_NOTMS,by="idp") %>%
+  summarise(N_patients=n_distinct(idp),min(dat),max(dat)) %>% kable(caption = "Dates d'històric de facturacions d'antipsicotics de codis inclosos") %>% kableExtra::kable_styling()
+
+descrTable(edad_grup~FX_APSIC,data=dt_NOTMS,show.p.overall = F, method = 3,show.all = T) %>% 
+  export2md()
+
+
+
+```
+
+
+
+```{r aplicacio_criteris}
+conductor_variables<-here::here("variables_qrisk.xls")
+
+# Aplicació de criteris d'exclusió
+criteris_exclusio_diagrama(dades,taulavariables=conductor_variables,criteris = "exclusio3",ordre="ordre",etiquetes = "lab_exc",sequencial = F)
+
+# dades<-dades %>% criteris_exclusio(taulavariables = conductor_variables,criteris = "exclusio2")
+dades<- dades %>% filter(DG.TMS=="Yes")
+```
+
+
+
+## 1.2. Descriptiva de subgrups de TMS i combinacions 
+
+```{r Descriptiva_TMS}
+# Descriptiva
+descrTable(formula.text("TMS","sexe",taulavariables=conductor_variables),data=dades,hide = "No",show.all = T,show.p.overall = F,extra.labels = c("","","")) %>% export2md()
+
+
+# Desscriptiva de combiacions de TMS
+dt_temp<-
+  dades %>% filter(N_TMS>1) %>% 
+  select(DG.TMS,N_TMS,extreure.variables("TMS",conductor_variables)) %>% 
+  tidyr::unite(ES_BI_AL_DEP,extreure.variables("TMS",conductor_variables),sep="_")
+ 
+descrTable(~N_TMS,data=dades,max.xlev = 20, method = 3, Q1=0,Q3=1,extra.labels = c("","","")) %>% 
+  export2md(caption = "Summary descriptives table of number of TMS diagnostics")
+
+descrTable(dt_temp,max.xlev = 50, method = 3, Q1=0,Q3=1,extra.labels = c("","","")) %>% 
+  export2md()
+
+
+
+```
+
+```{r prioritzacio_TMS }
+# Arreglar priorització TMS segons conductor
+
+# Generar TMS excloents segons criteris prioritaris
+vars_TMS<-extreure.variables("TMS",conductor_variables)
+
+# Ull no estan totes les combinacions (només les de la Base de dades)
+combi_TMS <- read_conductor(conductor_variables,sheet="solapaments_TMS") %>% 
+  tidyr::unite(ES_BI_AL_DEP,vars_TMS,sep="_") %>% 
+  tidyr::unite(ES_BI_AL_DEP_nou,paste0(vars_TMS,2),sep="_") %>% 
+  tidyr::separate(ES_BI_AL_DEP_nou,vars_TMS,sep="_") %>% 
+  select(ES_BI_AL_DEP,vars_TMS)
+
+# Unir a dades solapaments arreglats de diagnostics
+dades<-dades %>% 
+  tidyr::unite(ES_BI_AL_DEP,vars_TMS,sep="_") %>% 
+  left_join(combi_TMS)
+
+# Desscriptiva de combiacions de TMS
+dt_temp<-
+  dades %>% filter(N_TMS>1) %>% 
+  select(DG.TMS,N_TMS,extreure.variables("TMS",conductor_variables)) %>% 
+  tidyr::unite(ES_BI_AL_DEP,extreure.variables("TMS",conductor_variables),sep="_")
+ 
+descrTable(dt_temp,max.xlev = 50, method = 3, Q1=0,Q3=1,extra.labels = c("","","")) %>% 
+  export2md()
+
+
+```
+
+
+```{r filtrar_subgrups}
+
+
+# Filtrar si hi ha analisis de subgrups
+parametre_subgrup<-params$subgrup
+if (params$subgrup!="NA") dades<-dades %>% filter(!!sym(parametre_subgrup)=="Yes")
+
+
+
+```
+
+
+```{r}
+# Categorització de qmedea
+dades<-dades %>% mutate(qmedea=ifelse(qmedea=="","NA",qmedea)) 
+
+dades<-etiquetar_valors(dades,conductor_variables,fulla="value_label")
+
+dades<-etiquetar(dades,taulavariables = conductor_variables)
+
+
+```
+
+
+
+
+
+```{r, include=FALSE}
+
+# Verificació d'aparellament 
+
+compareGroups::descrTable(DG.TMS~sexe+dnaix,data=dades,extra.labels = c("","","")) %>% export2md(caption = "Descriptiva verificació d'aparellament")
+
+compareGroups::descrTable(~n_match,data=dades,method = 3,extra.labels = c("","","")) %>% export2md(caption = "Nombre de controls per grup a risc")
+
+
+```
+ 
+
+
+
+## 1.2. Descriptiva 
+
+```{r, mensage=F, include=T}
+
+formu<-formula.text("explo",y="",taulavariables = conductor_variables)
+
+descrTable(formu,dades, method = 2,Q1=0, Q3=1,extra.labels = c("","","")) %>% 
+  export2md(caption = "Descriptiva exploratoria")
+  
+
+# table(dades$qmedea,dades$ruralitat) %>% kable(caption="Medea x Ruralitat") %>% kableExtra::kable_styling()
+
+# table(dades$any_index) %>% kable() %>% kableExtra::kable_styling()
+
+```
+
+## 1.3. Validació de REGICOR calculat versus REGICOR segons Ecap 
+
+### Correlació regicor calculat vs regicor Ecap
+
+- Descriptiva, correlació i plot
+- Llistat mostra de casos
+
+```{r}
+descrTable(~REGICOR.valor+regicor,data=dades) %>% 
+  export2md(caption = "Descriptiva Baseline")
+
+t.test(dades$REGICOR.valor,dades$regicor) %>% print.AsIs()
+
+cor<-cor.test(dades$REGICOR.valor,dades$regicor) 
+kable(cor$estimate,digits = 3) %>% kableExtra::kable_styling() 
+
+
+dt_temp <- dades %>% filter(!is.na(REGICOR.valor) & !is.na(regicor))
+descrTable(~REGICOR.valor+regicor,data=dt_temp) %>% 
+  export2md(caption = "Descriptiva Baseline")
+
+ggplot(data=dt_temp,aes(REGICOR.valor,regicor))+ 
+  ggplot2::geom_point()
+
+
+dt_temp %>% select(REGICOR_ECAP=REGICOR.valor,Regicor_calculat=regicor,extreure.variables("REGICOR",taulavariables = conductor_variables)) %>% 
+  head() %>% 
+  kable(caption = "Mostra de pacients amb regicor calculat",digits = 1) %>% 
+  kableExtra::kable_styling()
+
+
+
+```
+
+
+
+# 2. Descriptiva baseline global i per sexe
+
+```{r, include=T}
+formu<-formula.text("baseline",y="sexe",taulavariables = conductor_variables)
+
+descrTable(formu,dades,include.miss = T, show.n = T, show.all = T, show.p.overall = F,hide = "No",extra.labels = c("","","")) %>% 
+  export2md(caption = "Descriptiva Baseline")
+
+
+```
+
+
+
+# 3. Descriptiva escales de risk global y per sexe
+
+```{r, include=T}
+
+formu<-formula.text("REGICOR",y="sexe",taulavariables = conductor_variables)
+
+descrTable(formu,dades, include.miss = T,show.n = T, show.all = T,show.p.overall = F,extra.labels = c("","","")) %>%
+  export2md(caption = "Descriptiva exploratoria REGICOR")
+
+descrTable(formu,dades, method = 2,Q1=0, Q3=1,show.n = T, show.all = T,show.p.overall = F,extra.labels = c("","","")) %>%
+    export2md(caption = "Descriptiva exploratoria REGICOR")
+
+
+formu<-formula_table1("REGICOR","sexe",taulavariables = conductor_variables)
+table1::table1(formu,data=dades,caption="Descriptiva de Regicor")
+
+
+formu<-formula.text("QRISK",y="sexe",taulavariables = conductor_variables)
+
+descrTable(formu,dades, include.miss = T,show.n = T, show.all = T,show.p.overall = F,extra.labels = c("","","")) %>% 
+  export2md(caption = "Descriptiva exploratoria QRisk")
+
+descrTable(formu,dades, method = 2,Q1=0, Q3=1,show.n = T, show.all = T,show.p.overall = F,extra.labels = c("","","")) %>% 
+    export2md(caption = "Descriptiva exploratoria QRisk")
+
+
+# #
+# formu<-formula_table1("QRISK",y="sexe",taulavariables = conductor_variables)
+# table1::table1(formu,data=dades)
+
+```
+
+# 4.  Descriptiva d'events i taxes d'incidència estratificades per sexe
+
+
+```{r}
+# Generar resum d'esdeveniments 
+# resum_events_v3(dades,evento="EV.CVD",temps="EV.CVD_temps",valorevent=1) 
+llistaevents<-extreure.variables("events",conductor_variables)
+llista_temps<-extreure.variables("t_event",conductor_variables)
+
+# Summary d'events
+map2_df(llistaevents,llista_temps,~resum_events_v3(dades,evento=.x,temps=.y,valorevent=1),.id="event") %>% 
+  etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment") %>% kableExtra::kable_styling()
+
+# Summary events estratificat per Sexe
+dades %>% split(.$sexe) %>% map_df(
+  function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
+  .id="Grup") %>% 
+  etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment") %>% kableExtra::kable_styling()
+
+
+
+
+```
+
+# 4.2.  Descriptiva d'events i taxes d'incidència estratificades per grup d'edat
+
+```{r}
+# Generar grup de edad
+# table(Hmisc::cut2(dades$edat,g=10))
+dades<-dades %>% mutate(edat_grup=Hmisc::cut2(edat,g=10))
+
+# Summary events estratificat per Sexe
+dades %>% split(.$edat_grup) %>% map_df(
+  function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
+  .id="Grup") %>% 
+  etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment") %>% kableExtra::kable_styling()
+
+
+```
+
+# 4.3.  Descriptiva d'events i taxes d'incidència estratificades per MEDEA i ruralitat
+
+```{r}
+
+
+# Summary events estratificat per MEDEA
+dades %>% split(.$qmedea) %>% map_df(
+  function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
+  .id="Grup") %>% 
+  etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment") %>% kableExtra::kable_styling()
+
+# Summary events estratificat per Sexe
+dades %>% split(.$ruralitat) %>% map_df(
+  function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
+  .id="Grup") %>% 
+  etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment") %>% kableExtra::kable_styling()
+
+
+```
+
+
+# 5. Hazard ratio per cada event cardiovascular per QRISK3 i Regicor (global i per sexe)
+
+- Es seleccionen de dades completes en ambdos indicadors (Qrisk & Regicor)
+- Curves ROC y AUC's per cada outcome
+
+```{r funcio_output}
+
+genera_output_HR<-function(x_event="EV.CVD",x_temps="EV.CVD_temps",dt=dades) {
+
+  # x_event="EV.CVD"
+  # x_temps="EV.CVD_temps"
+  # dt=dt_temp
+  
+  # x_event=llistaevents[4]
+  # x_temps=llista_temps[4]
+
+  sym_event=sym(x_event)
+  sym_temps=sym(x_temps)
+
+  label_outcome<-read_conductor(conductor_variables) %>% filter(camp==x_event) %>% pull(descripcio)
+
+  cat("\n## OUTCOME: ",label_outcome,"\n")
+  
+  formu1<-paste0("Surv(",x_temps,",",x_event,") ~ QRISK3_2017") %>% as.formula()
+  
+  model<-try(coxph(formu1,data=dt))
+  # sjPlot::tab_model(model,show.aic=T,dv.labels=label_outcome)
+  cat(sjPlot::tab_model(model,show.aic=T,dv.labels=label_outcome)$knitr,"\n------\n") 
+  
+  cat("\n")
+  formu2<-paste0("Surv(",x_temps,",",x_event,") ~ regicor") %>% as.formula()
+  model <- coxph(formu2,data=dt) 
+  cat(sjPlot::tab_model(model,show.aic=T,dv.labels=label_outcome)$knitr,"\n------\n")
+  
+  # Genero curva ROC (1 calculo indicadors i plotejo)
+  # Només si te dos nivells l'event
+ 
+  if (dt %>% select(!!sym_event) %>% distinct() %>% nrow()==2) {
+    
+      g_qrisk <- try(pROC::roc(as.formula(paste0(x_event,"~QRISK3_2017")), data = dt %>% filter(!is.na(QRISK3_2017))))
+      auc1=try(pROC::auc(g_qrisk))
+      auc1_ci=try(pROC::ci(g_qrisk))
+      g_regicor <- try(pROC::roc(as.formula(paste0(x_event,"~regicor")), data = dt %>% filter(!is.na(regicor))))
+      auc2=try(pROC::auc(g_regicor))
+      auc2_ci=try(pROC::ci(g_regicor))
+    
+        # ggplot 
+    fig<-dt %>% transmute(D:=!!sym_event %>% as.numeric(),QRISK=QRISK3_2017 %>% as.numeric(),Regicor=as.numeric(regicor)) %>% 
+          plotROC::melt_roc(d="D", m=c("QRISK", "Regicor")) %>% 
+          ggplot(aes(d = D.D, m = M, color = name)) + 
+          plotROC::geom_roc() + 
+          plotROC::style_roc() +
+          annotate("text", x = .75, y = .25, label = paste("AUC:",round(auc1,2),"   [95CI%:",round(auc1_ci[2],2),"-",round(auc1_ci[3],2),"]"),colour = "red") +
+  
+          annotate("text", x = .75, y = .18, label = paste("AUC:",round(auc2,2),"  [95CI%:",round(auc2_ci[2],2),"-",round(auc2_ci[3],2),"]"),colour = "skyblue2") + 
+          ggtitle("ROC curve")
+        
+       print(fig)
+
+      }
+  
+  cat("\n### Estratificat per sexe\n")
+ 
+  # Estratificat per sexe
+  models<-
+    dt %>% split(.$sexe) %>% 
+    map(~coxph(formu1,data=.x),.id="grup") %>% try()
+  
+  cat(sjPlot::tab_model(models,show.aic=T,auto.label = T,dv.labels = c(names(models)[[1]], names(models)[[2]]),title=label_outcome)$knitr,"\n-------\n")
+  
+  cat("\n")
+  
+  models<-
+    dt %>% split(.$sexe) %>% 
+    map(~coxph(formu2,data=.x),.id="grup") %>% try()
+
+  cat(sjPlot::tab_model(models,show.aic=T,auto.label = T,dv.labels = c(names(models)[[1]], names(models)[[2]]),title=label_outcome)$knitr) 
+
+  cat("\n")  
+
+}
+
+
+
+```
+
+
+```{r message=FALSE, warning=FALSE, include=T, echo=FALSE,size="huge", results="asis"}
+
+# genera_output
+
+# llistaevents[1]
+# llista_temps[1]
+# 
+# dt_temp<-dades %>% filter(regicor>=0 & QRISK3_2017>=0)
+# genera_output_HR(llistaevents[4],llista_temps[4],dt_temp)
+
+# Filtro dades completes de REGICOR + RQrisk
+dt_temp<-dades %>% filter(regicor>=0 & QRISK3_2017>=0)
+
+purrr::map2(llistaevents,llista_temps,~genera_output_HR(.x,.y,dt_temp)) %>% invisible()
+
+
+
+
+```
+
+```{r generotaulaHR}
+taula_HR<-function(x_event="EV.CVD",x_temps="EV.CVD_temps",dt=dades) {
+  
+  # x_event="EV.AIT"
+  # x_temps="EV.AIT_temps"
+  # dt=dades %>% filter(regicor>=0 & QRISK3_2017>=0)
+  
+  sym_event=sym(x_event)
+  sym_temps=sym(x_temps)
+  
+  formu1<-paste0("Surv(",x_temps,",",x_event,") ~ QRISK3_2017") %>% as.formula()
+  modelQrisk<-try(coxph(formu1,data=dt))
+    
+  if (is.na(modelQrisk$coefficients)) {
+        modelQrisk<-tibble(Parameter="QRISK3_2017",SE=NA,Coefficient=NA,CI_low=NA,CI_high=NA,p=NA,z=NA,df_error=NA) } else {
+        modelQrisk<-modelQrisk %>% parameters::parameters(exponentiate =T) %>% as_tibble() }
+  
+  
+  formu2<-paste0("Surv(",x_temps,",",x_event,") ~ regicor") %>% as.formula()
+  modelRegicor <- try(coxph(formu2,data=dt)) 
+  
+   if (is.na(modelRegicor$coefficients)) {
+        modelRegicor<-tibble(Parameter="regicor",SE=NA,Coefficient=NA,CI_low=NA,CI_high=NA,p=NA,z=NA,df_error=NA) } else {
+        modelRegicor<-modelRegicor %>% parameters::parameters(exponentiate =T) %>% as_tibble() }
+  
+  bind_cols(event=x_event,bind_rows(modelQrisk,modelRegicor)) %>% 
+    select(-c(SE,z,df_error)) %>% rename(HR=Coefficient)
+
+  }
+
+
+taula_HR_grup<-function(x_event="EV.CVD",x_temps="EV.CVD_temps",dt=dt_temp,grup="sexe") {
+  split(dt,dt[grup]) %>% map_df(~taula_HR(x_event=x_event,x_temps,.x),.id="grup")}
+
+
+
+```
+
+## 5.2 Taula resum de hazard ratios per cada event per QRISK3 i Regicor, global i per sexe
+
+```{r}
+
+dt_temp<-dades %>% filter(regicor>=0 & QRISK3_2017>=0)
+map2_df(llistaevents,llista_temps,~taula_HR(.x,.y,dt_temp)) %>% 
+  kableExtra::kable(caption = "Taula HR per event",digits = 3) %>% kableExtra::kable_styling()
+
+# Estratificat per sexe 
+# taula_HR_grup(x_event="EV.CVD",x_temps="EV.CVD_temps",dt=dt_temp,grup="sexe")
+
+map2_df(llistaevents,llista_temps,~taula_HR_grup(.x,.y,dt_temp,grup="sexe")) %>% 
+  kableExtra::kable(caption = "Taula HR per event estratificat per sexe",digits = 3) %>% kableExtra::kable_styling()
+
+gc()
+
+```
+
+
+```{r genero_AUC_R2}
+
+taula_AUC_R2<-function(x_event="EV.CVD",dt=dades) {
+
+  # x_event="EV.CVD"
+  # dt=dades %>% filter(regicor>=0 & QRISK3_2017>=0)
+  
+  sym_event=sym(x_event)
+  
+  # Calcul de AUC
+ 
+  if (length(table(dt[x_event]))==2 ) {
+
+      g_qrisk <- try(pROC::roc(as.formula(paste0(x_event,"~QRISK3_2017")), data = dt %>% 
+                                 filter(!is.na(QRISK3_2017))))
+      auc1_ci=try(pROC::ci(g_qrisk)) %>% as.numeric()
+
+      g_regicor <- try(pROC::roc(as.formula(paste0(x_event,"~regicor")), data = dt %>% 
+                                   filter(!is.na(regicor))))
+      auc2_ci=try(pROC::ci(g_regicor)) %>% as.numeric()
+      
+  } else {
+        
+    auc1_ci=c(NA,NA,NA)
+    auc2_ci=c(NA,NA,NA)
+    
+      }
+  
+
+  
+  tibble(AUC.qrisk=auc1_ci[2],AUC.qrisk_linf=auc1_ci[1],AUC.qrisk_lsup=auc1_ci[3], 
+         AUC.regicor=auc2_ci[2],AUC.regicor_linf=auc2_ci[1],AUC.regicor_lsup=auc2_ci[3])
+ 
+  # Calcul de R2
+  # formu1<-paste0("Surv(",x_temps,",",x_event,") ~ QRISK3_2017") %>% as.formula()
+  # model<-try(coxph(formu1,data=dt))
+  # pp<-summary(model)
+  # pp$concordance
+  
+  }
+
+taula_AUC_R2_grup<-function(x_event="EV.CVD",dt=dt_temp,grup="sexe") {
+  
+  split(dt,dt[grup]) %>% map_df(~taula_AUC_R2(x_event=x_event,dt=.x),.id="grup")
+  
+  }
+
+
+```
+
+## AUC resum global i per sexe
+
+```{r}
+
+dt_temp<-dades %>% filter(regicor>=0 & QRISK3_2017>=0)
+
+llistaevents %>% map_df(~taula_AUC_R2(.x,dt=dt_temp),.id="Event")
+
+# Per sexe 
+llistaevents %>% map_df(~taula_AUC_R2_grup(.x,dt=dt_temp,grup = "sexe"),.id="Event")
+
+
+```
+
+## Models de regressió ajustats de riscos proporcionals de Cox 
+
+S'ha fet exclusivament amb la N de participants que tenim calculat Qrisk i regicor
+
+```{r, results="asis"}
+
+# formulaCOX("model1",event = llistaevents[1],temps = llista_temps[1], a="regicor", taulavariables = conductor_variables) %>% coxph(data=dades) %>% 
+#   sjPlot::tab_model()
+
+map2(llistaevents,llista_temps,~formulaCOX("model1",event = .x,temps = .y, a="regicor", taulavariables = conductor_variables)) %>% 
+  map(~coxph(.x,data=dt_temp)) %>% 
+  sjPlot::tab_model(title = "Modelos de regressión de Cox ajustados. Regicor ajustado")
+
+
+map2(llistaevents,llista_temps,~formulaCOX("model1",event = .x,temps = .y, a="QRISK3_2017", taulavariables = conductor_variables)) %>% 
+  map(~coxph(.x,data=dt_temp)) %>% 
+  sjPlot::tab_model(title = "Modelos de regressión de Cox ajustdos. Qrisk ajustado")
+
+
+```
+
+
+
+```{r,include=F}
+
+# 4. Descriptiva escales de risk global y per diferents tipus de TMS
+
+varsTMS<-extreure.variables("TMS",conductor_variables)
+
+formu<-formula.text("REGICOR",y="DG.ESQUIZO",taulavariables = conductor_variables)
+
+descrTable(formu,dades, include.miss = T,show.n = T, show.all = T) %>% 
+  export2md()
+
+descrTable(formu,dades, method = 2,Q1=0, Q3=1,show.n = T, show.all = T) %>% 
+    export2md()
+
+
+formu<-formula.text("REGICOR",y="DG.ESQUIZO",taulavariables = conductor_variables)
+
+descrTable(formu,dades, include.miss = T,show.n = T, show.all = T) %>% 
+  export2md()
+
+descrTable(formu,dades, method = 2,Q1=0, Q3=1,show.n = T, show.all = T) %>% 
+    export2md()
+
+
+formu<-formula.text("REGICOR",y="DG.BIPOLAR_MANIA",taulavariables = conductor_variables)
+
+descrTable(formu,dades, include.miss = T,show.n = T, show.all = T) %>% 
+  export2md()
+
+descrTable(formu,dades, method = 2,Q1=0, Q3=1,show.n = T, show.all = T) %>% 
+    export2md()
+
+
+formu<-formula.text("REGICOR",y="DG.ALTRES_PSICOTICS",taulavariables = conductor_variables)
+
+descrTable(formu,dades, include.miss = T,show.n = T, show.all = T) %>% 
+  export2md()
+
+descrTable(formu,dades, method = 2,Q1=0, Q3=1,show.n = T, show.all = T) %>% 
+    export2md()
+
+
+formu<-formula.text("REGICOR",y="DG.DEPRESSIO_GREU",taulavariables = conductor_variables)
+
+descrTable(formu,dades, include.miss = T,show.n = T, show.all = T) %>% 
+  export2md()
+
+descrTable(formu,dades, method = 2,Q1=0, Q3=1,show.n = T, show.all = T) %>% 
+    export2md()
+
+
+
+
+```
+
+
+
+

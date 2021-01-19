@@ -1,0 +1,297 @@
+---
+title: "Predicció del risc cardiovascular mitjançant dos escales en pacients  amb trastorn mental sever: estudi de cohorts retrospectiu"
+
+params:
+  fitxers_test: TRUE
+
+---
+
+# 1. Lectura de fitxers / Paràmmetres
+
+```{r}
+# 0. Inicialització de parametres  -----------------------------
+
+# N test mostra a seleccionar  (Nmostra=Inf)
+
+# Nmostra=Inf  # Seria tota la mostra
+nmostra=Inf
+# fitxers_test<-T
+
+
+library(lubridate)
+
+conductor_cataleg<-here::here("cataleg_qrisk.xls")
+
+# Carregar funcions de lectura de dades ------------------
+
+link_source<-paste0("https://github.com/jrealgatius/Stat_codis/blob/master/funcions_propies.R","?raw=T")
+devtools::source_url(link_source)
+
+source(here::here("codi/global_lectura.R"))
+
+# Si fitxers_test  carrego fitxers mostra 
+funcions_lectura_dades(mostra=params$fitxers_test)
+
+
+# Lectura de fitxers  -------------
+# Població
+dt_poblacio<-nmostra %>% LLEGIR.POBLACIO() %>% 
+  left_join(nmostra %>% LLEGIR.VAR.GEOSANITARIES()) %>% 
+  left_join(nmostra %>% LLEGIR.SOCIOECONOMIQUES())
+
+# Llegir historics 
+dt_cliniques<-nmostra %>% LLEGIR.CLINIQUES()
+dt_analitiqu<-nmostra %>% LLEGIR.ANALITIQUES()
+dt_facturats<-nmostra %>% LLEGIR.FX.FACTURATS()
+dt_prescrits<-nmostra %>% LLEGIR.FX.PRESCRITS()
+dt_problemes<-nmostra %>% LLEGIR.PROBLEMES()
+dt_tabaquism<-nmostra %>% LLEGIR.TABAC()
+dt_visites<-nmostra %>% LLEGIR.VISITES()
+dt_visitesagr<-nmostra %>% LLEGIR.VISITES_AGR()
+
+# Llegeix cataleg_qrisk.xls 
+dt_cataleg<-read_excel(conductor_cataleg)
+
+
+```
+
+
+# Generació data index (Data index)
+
+> Ultima data entre 2007-2010 amb informació necessaria per al calcul de Escala qrisk (Determinacions o problemes de salut) 
+> Inclusió : 1 visita entre 2007-2010
+> Ultima data entre 2007-2010 amb informació necessaria per al calcul de Escala qrisk (Determinacions) 
+
+
+
+```{r}
+# Selecciono agr tal info_data_inclusio==1 per tal de seleccionar data index
+codis_data_inclusio<-dt_cataleg %>% filter(info_data_inclusio==1) %>% select(cod,agr) %>% unique()
+
+
+# Netejar cataleg
+dt_cataleg <- dt_cataleg %>% select(cod,des,agr,agr2,CORTIS,TMS_sub,TMS) %>% unique()
+
+# Generar data d'inclusio (data index)      ----------------
+
+# Ultima data entre 2007-2010 amb informació necessaria per calcul de Escala qrisk (Determinacions) 
+# Ultima data entre 2007-2010 amb informació necessaria per calcul de Escala qrisk (Determinacions) 
+
+# Buscar data màxima per codi dins finestra 2007-2010   ------------
+temp1<-dt_cliniques %>% filter(dat>=20070101 & dat<=20101231) %>% semi_join(codis_data_inclusio,by="cod") %>% group_by(idp) %>% slice(which.max(dat)) %>% ungroup() %>% select(idp,dat)
+#
+temp2<-dt_analitiqu %>% filter(dat>=20070101 & dat<=20101231) %>% semi_join(codis_data_inclusio,by="cod") %>% group_by(idp) %>% slice(which.max(dat)) %>% ungroup() %>% select(idp,dat)
+#
+#
+temp3<-dt_tabaquism %>% filter(dat>=20070101 & dat<=20101231) %>% group_by(idp) %>% slice(which.max(dat)) %>% ungroup() %>% select(idp,dat)
+
+# Juntar i agafar data màxima  ----------------
+dt_dataindex<-temp1 %>% bind_rows(temp2) %>% bind_rows(temp3) %>% group_by(idp) %>% slice(which.max(dat)) %>% ungroup()
+
+rm(temp1,temp2,temp3)
+
+dt_dataindex %>% summarise(min(dat),max(dat))
+
+dt_dataindex<-dt_dataindex %>% transmute(idp,dtindex=dat)
+
+```
+
+# Formatejar i agregar
+
+```{r}
+# Canviar cod per agr
+dt_cliniques <- dt_cliniques %>% transmute(idp,cod=agr,dat,val) 
+
+# Agregar variables 
+dtid_variables<-agregar_analitiques(dt_cliniques,bd.dindex = dt_dataindex,finestra.dies=c(-365,0),sufix = c(".valor", ".dies"),fun="mean")
+dtid_analitiques<-agregar_analitiques(dt_analitiqu,bd.dindex = dt_dataindex,finestra.dies=c(-365,0),sufix = c(".valor", ".dies"),fun="mean")
+
+
+```
+
+
+```{r}
+# Agregar problemes de salut 
+
+dtid_problemes<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_cataleg ,finestra.dies = c(-Inf,0),prefix = "DG.",camp_agregador = "agr",keep.code = F)
+
+dtid_problemes2<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_cataleg ,finestra.dies = c(-Inf,0),prefix = "DG.",camp_agregador = "agr2",keep.code = F)
+
+# Agregar TMS tot el periode
+dtid_problemes3<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_cataleg ,finestra.dies = c(-Inf,+Inf),prefix = "DG.",camp_agregador = "TMS_sub",keep.code = F)
+dtid_problemesTMS<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_cataleg ,finestra.dies = c(-Inf,+Inf),prefix = "DG.",camp_agregador = "TMS",keep.code = F)
+
+
+dtid_events<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_cataleg ,finestra.dies = c(+1,+Inf),prefix = "EV.",camp_agregador = "agr",keep.code = F)
+dtid_events2<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_cataleg ,finestra.dies = c(+1,+Inf),prefix = "EV.",camp_agregador = "agr2",keep.code = F)
+
+
+
+```
+
+# Calcular SD de PAS per individu
+
+```{r}
+
+dt_PAS_SD<-
+  dt_cliniques %>% 
+  filter(cod=="PAS") %>% 
+  left_join(dt_dataindex,by="idp") %>% 
+  mutate(linf=ymd(dtindex)-lubridate::years(1)) %>% 
+  filter (ymd(dat)>=linf & dat<=dtindex) %>% 
+  group_by(idp) %>% 
+  mutate(PAS_sd=sd(val)) %>% ungroup() %>% 
+  mutate(PAS_sd=if_else(is.na(PAS_sd),0,PAS_sd)) %>% select(idp,PAS_sd) %>% 
+  group_by(idp) %>% slice(1) %>% ungroup()
+
+
+```
+
+
+
+# Agregar facturats
+
+```{r}
+
+# Formatar dt_facturats (datainici i datafi) i eliminar solapaments 
+dt_facturats<-dt_facturats %>% mutate(dataini=paste0(as.character(dat),"15"),
+                                                     dataini=lubridate::ymd(dataini),
+                                                     datafi=dataini+(env*30))
+
+# MAP_ggplot_univariant(dades=dt_facturats %>% filter(agr=="HTA"),datainicial="dataini",datafinal="datafi",id="idp", Nmostra=10,add_point=NA,add_final=NA,set_seed = 123)
+# Eliminar gaps per agregador
+
+dt_facturats_formatat<-agregar_solapaments_gaps(dt=dt_facturats,id="idp",datainici="dataini",datafinal="datafi",gap=60,sel=T)
+
+
+# MAP_ggplot_univariant(dades=dt_facturats_formatat,datainicial="dataini",datafinal="datafi",id="idp", Nmostra=10,add_point=NA,add_final=NA,set_seed = 123)
+
+# Agregar farmacs facturats ----------------
+
+dt_farmacs_grups<-
+  dt_facturats %>% 
+  select(-agr) %>% 
+  left_join(select(dt_cataleg,cod,agr),by="cod") %>% 
+  split(.$cod)
+
+dt_farmacs_facturats<-dt_farmacs_grups %>%
+  map_dfr(~agregar_solapaments_gaps(dt=.x,id="idp",datainici="dataini",datafinal="datafi",gap=60,sel=T),.id="cod")
+
+dt_farmacs_facturats <- dt_farmacs_facturats %>% mutate(dat=dataini,dbaixa=datafi) 
+
+
+dtid_facturats <-agregar_facturacio(dt=dt_facturats,finestra.dies=c(-365,0),dt.agregadors=dt_cataleg,bd.dindex=dt_dataindex,prefix="FD.",camp_agregador="agr", agregar_data=F)
+dtid_facturats2 <-agregar_facturacio(dt=dt_facturats,finestra.dies=c(-365,0),dt.agregadors=dt_cataleg,bd.dindex=dt_dataindex,prefix="FD.",camp_agregador="agr2", agregar_data=F)
+
+
+# ACtualitzar CORTICOIDES, cronica (>=6 envasos)
+dtid_facturats<-dtid_facturats %>% mutate(FD.G_CORT=if_else(FD.G_CORT>=6,FD.G_CORT,0))
+
+
+```
+
+
+
+# Agregar prescripcio --------
+
+```{r}
+
+dtid_prescrits<-agregar_prescripcions(dt=dt_prescrits,finestra.dies=c(-30,+30),dt.agregadors=dt_cataleg,bd.dindex=dt_dataindex,prefix="FP.",camp_agregador="agr", agregar_data=F)
+
+# Amb els corticoides>180 DIES DELS ULTIMS 365 mesos finestra (-365,+30)
+dtid_prescrits_CORTIS<-
+  agregar_prescripcions(dt=dt_prescrits,finestra.dies=c(-365,+30),dt.agregadors=dt_cataleg,bd.dindex=dt_dataindex,prefix="FP.",camp_agregador="CORTIS", agregar_data=F) %>%
+  filter(FP.G_CORT>180)
+
+# Actualitzar CORTIS farmacs prescrits per CRONIC (>180 DIES)
+dtid_prescrits<-dtid_prescrits %>% select(-FP.G_CORT) %>% left_join(dtid_prescrits_CORTIS,by=c("idp","dtindex"))
+
+dtid_prescrits2<-agregar_prescripcions(dt=dt_prescrits,finestra.dies=c(-30,+30),dt.agregadors=dt_cataleg,bd.dindex=dt_dataindex,prefix="FP.",camp_agregador="agr2", agregar_data=F)
+
+# Amb els corticoides acumular 
+
+
+```
+
+
+# Agregar tabaquisme ---------
+
+```{r}
+
+
+dt_tabaquism <-dt_tabaquism %>% mutate(cod="tabac")
+dtid_tabaquism<-agregar_analitiques(dt_tabaquism,bd.dindex = dt_dataindex,finestra.dies = c(-Inf,0))
+
+
+```
+
+
+
+# Agregar visites  ------------
+
+```{r}
+
+dt_visites<-dt_visites %>% mutate(cod=as.character(cod)) %>%  left_join(transmute(dt_cataleg,cod,agr2),by="cod") %>% transmute(idp,cod=agr2,dat)
+
+dtid_visites<-agregar_visites(dt=dt_visites,bd.dindex=dt_dataindex,finestra.dies = c(-365,0)) 
+
+
+# Recode 0->NA
+# dt_dataindex<-dt_dataindex %>% mutate_all(funs(ifelse(.==0,NA,.)))
+# dt_dataindex<-dt_dataindex %>% mutate(dtindex=pmin(visites_10999,visites_30999,na.rm = T)) %>% select(idp,dtindex)
+
+
+
+```
+
+
+
+# Fusionar totes les taules ---
+
+```{r}
+
+dt_total<-
+  dt_dataindex %>% 
+  left_join(dt_poblacio,by="idp") %>% 
+  left_join(dtid_problemes,by=c("idp","dtindex")) %>% 
+  left_join(dtid_problemes2,by=c("idp","dtindex")) %>% 
+  left_join(dtid_problemes3,by=c("idp","dtindex")) %>% 
+  left_join(dtid_problemesTMS,by=c("idp","dtindex")) %>% 
+  left_join(dtid_events,by=c("idp","dtindex")) %>% 
+  left_join(dtid_events2,by=c("idp","dtindex")) %>% 
+  left_join(select(dtid_analitiques,-dtindex) ,by="idp") %>% 
+  left_join(select(dtid_tabaquism,-dtindex),by="idp") %>% 
+  left_join(select(dtid_variables,-dtindex),by="idp") %>% 
+  left_join(select(dtid_facturats,-dtindex),by="idp") %>% 
+  left_join(select(dtid_facturats2,-dtindex),by="idp") %>% 
+  left_join(select(dtid_prescrits,-dtindex),by="idp") %>% 
+  left_join(select(dtid_prescrits2,-dtindex),by="idp") %>% 
+  left_join(select(dtid_visites,-dtindex),by="idp") %>% 
+  left_join(dt_PAS_SD,by="idp")
+
+
+```
+
+
+# Salvar dades
+
+```{r}
+
+
+if (params$fitxers_test) fitxer_dades<-"dades_test_crues.Rds" else fitxer_dades<-"dades_crues.Rds"
+
+
+saveRDS(dt_total,file=here::here("dades",fitxer_dades))
+
+
+```
+
+
+
+
+
+
+
+
+
+
