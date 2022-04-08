@@ -1,6 +1,5 @@
 ## Generació d'informe
 
-
 # 1. Lectura
 rm(list = ls())
 test_param<-F
@@ -9,16 +8,16 @@ rmarkdown::render(here::here("codi","1_lectura_qrisk.Rmd"),params = list(fitxers
 
 # 2. Preparació
 rm(list = ls())
-test_param<-T
+gc()
+test_param<-F
 rmarkdown::render(here::here("codi","2_preparacio_qrisk.Rmd"),params = list(fitxers_test= test_param))
 
 # 3. Analisis
+gc()
 rm(list = ls())
-test_param<-T
+test_param<-F
 rmarkdown::render(here::here("codi","3_Analisis_qrisk.Rmd"),
-                  params = list(fitxers_test= test_param),output_file = here::here("resultats",paste0("Informe_resultats_test",Sys.Date())))
-
-
+                  params = list(fitxers_test= test_param),output_file = here::here("resultats",paste0("Informe_resultats",Sys.Date())))
 
 
 #### Generació d'informes #######

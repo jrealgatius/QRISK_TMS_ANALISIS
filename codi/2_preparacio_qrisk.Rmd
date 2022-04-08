@@ -121,7 +121,7 @@ knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, include=F,size
 library(lubridate)
 library(compareGroups)
 library(QRISK3)
-library(flexdashboard)
+# library(flexdashboard)
 library(DT)
 
 
@@ -141,7 +141,6 @@ if (params$fitxers_test) fitxer_dades<-"dades_test_crues.Rds" else fitxer_dades<
 
 dades<-readRDS(here::here("dades",fitxer_dades))
 
-
 ```
 
 
@@ -155,8 +154,7 @@ dades<-dades %>% mutate_at(vars(starts_with("FD.")),
 
 # NA --> 0 (Else=1) (No hi ha 0)
 dades<-dades %>% mutate_at(vars(starts_with("FP.")), 
-                         funs(if_else(.>0,1,0,missing = 0))) 
-
+                        funs(if_else(.>0,1,0,missing = 0))) 
 
 #   Recode diagnostics basals ---------
 # NA --> 0 (Else=1) (No hi ha 0)
@@ -167,10 +165,8 @@ dades<-dades %>% mutate_at(vars(starts_with("DG.")),
 dades<-dades %>% 
   mutate(edat = time_length(interval(ymd(dnaix), ymd(dtindex)),"year") %>% round(2))
 
-
 # Any inclusió --------------  
 dades<-dades %>% mutate(any_inclusio=year(ymd(dtindex)))
-
 
 # diabetes en funció de diagnostic o antidiabetics
 dades<-dades %>% mutate (DG.DM=if_else(FD.DM>0 | FP.DM>0 | DG.DM==1,1,0,missing = 0))
@@ -185,15 +181,52 @@ dades<-dades %>% mutate(DG.MRNC=if_else(CKDEPI.valor<60 | DG.MRNC==1,1,0,missing
 
 dades<-dades %>% mutate(cholesterol_HDL_ratio=COLTOT.valor/COLHDL.valor)
 
+
 # Recode to Missings
 dades<-dades %>% recode_to_missings(conductor_variables,rang = "rang_valid")
 
-# grups d'edat
-dades<-dades %>% recodificar(conductor_variables,criteris = "recode")
 
-table(dades$edat.cat7)
 
 ```
+
+## Reclassificació TMS segons farmacs antipsicotics
+
+```{r}
+
+# PACIENTS NO TMS ≤65 ANYS AMB TRACTAMENT ANTIPSICÒTIC SENSE DIAGNÒSTIC DE DEMÈNCIA
+# Incloure’ls com a TMS, però no els podrem classificar a cap subgrup diagnòstic, per tant, caldria crear una variable per identificar-los.
+# 
+# o   S’analitzaran pel global de TMS i quan fem anàlisi de subgrups diagnòstics no s’analitzaran.
+# Recodificar grup nou grup TMS (Tractament Antipsicòtic sense DG TMS Jove (<=65 anys))
+
+
+dades<-dades %>%  
+  mutate (DG.APSIC=if_else(DG.TMS==0 & (FD.APSIC==1 | FP.APSIC==1 ) & edat<=65 & DG.DEMENCIA==0,1,0)) %>% 
+  mutate (DG.TMS_DIAG= DG.TMS) %>% 
+  mutate (DG.TMS= if_else(DG.APSIC==1,1,DG.TMS)) 
+
+
+
+# # Revisió de casos
+# 
+# dades %>% filter (DG.TMS==1) %>% 
+#   select(idp, DG.TMS,FD.APSIC,FP.APSIC,edat,DG.DEMENCIA,DG.APSIC,DG.TMS_DIAG) %>% 
+#   head(50) %>% 
+#   write.csv2("mostra_n50_TMS")
+# 
+# dades %>% filter (DG.TMS==0) %>% 
+#   select(idp, DG.TMS,FD.APSIC,FP.APSIC,edat,DG.DEMENCIA,DG.APSIC,DG.TMS_DIAG) %>% 
+#   head(50) %>% 
+#   write.csv2("mostra_n50_noTMS")
+# 
+
+    
+# dades %>%
+#     filter(DG.TMS=="No" & (FD.APSIC=="Yes" | FP.APSIC=="Yes" ) & edat<=65) %>%
+#     select(DG.TMS,FD.APSIC,FP.APSIC,edat)
+
+```
+
 
 
 
@@ -211,10 +244,12 @@ table(dades$edat.cat7)
 dades_regicor<-dades %>% transmute(age=edat,
                                    sex=sexe,
                                    diabetes=DG.DM,
-                                   smoker=if_else(tabac.valor==1,1,0,missing = 0),
+                                   smoker=if_else(tabac.valor==1,1,0),
                                    coltot=COLTOT.valor,
                                    colhdl=COLHDL.valor,
                                    sbp=PAS.valor,dbp=PAD.valor)
+
+
 
 # Aplico formula i ho fuciono a dades
 temp<-dades_regicor
@@ -225,7 +260,7 @@ regicor_df<-
 
 dades<-dades %>% bind_cols(regicor_df)
 rm(temp,regicor_df)
-
+gc()
 
 ```
 
@@ -236,6 +271,8 @@ rm(temp,regicor_df)
 
 # selectorvariables("QRISK",conductor_variables,dades)
 
+# dades %>% filter(DG.DMII==0) %>% 
+#   select(FD.DM,FP.DM,DG.DMII)
 
 dades_qrisk <-dades %>% transmute(patid=idp,
                                   gender=if_else(sexe=="D",1,0),
@@ -255,13 +292,13 @@ dades_qrisk <-dades %>% transmute(patid=idp,
                                   blood_pressure_treatment=if_else((FD.HTA>0 | FP.HTA>0) & DG.HTA==1,1,0,missing = 0), # condicionat a DG.HTA
                                   
                                   diabetes1=DG.DMI,
-                                  diabetes2=DG.DMII,
+                                  diabetes2=as.numeric((DG.DMII==1 | FD.DM==1 | FP.DM==1) & DG.DMI==0),
                                   weight=PES.valor,
                                   height=TALLA.valor,
 
                                   heart_attack_relative=DG.ANT_FAM,
                                   
-                                  cholesterol_HDL_ratio=COLTOT.valor/COLHDL.valor,
+                                  cholesterol_HDL_ratio=cholesterol_HDL_ratio,
                                   systolic_blood_pressure=PAS.valor,
                                   smoke=case_when(tabac.valor==0~1,tabac.valor==1~4,tabac.valor==2~2),
                                   townsend=1,
@@ -314,17 +351,14 @@ dades_qrisk<-
 dades<-dades %>% left_join(dades_qrisk,by=c("idp"="patid"))
 
 
-# LLista de casos
-dades %>% select(extreure.variables("QRISK",conductor_variables)) %>% filter(QRISK3_2017_1digit>0) %>% head(5) %>% datatable()
-
-dades %>% select(extreure.variables("QRISK",conductor_variables)) %>% filter(QRISK3_2017_1digit>0 & DG.TMS==1) %>% head(5) %>% datatable(caption="Pacients TMS")
+# # LLista de casos
+# dades %>% select(extreure.variables("QRISK",conductor_variables)) %>% filter(QRISK3_2017_1digit>0) %>% head(5) %>% datatable()
+# 
+# dades %>% select(extreure.variables("QRISK",conductor_variables)) %>% filter(QRISK3_2017_1digit>0 & DG.TMS==1) %>% head(5) %>% datatable(caption="Pacients TMS")
 
 
 
 ```
-
-
-
 
 
 
@@ -358,7 +392,6 @@ criteris_exclusio_diagrama(dades,conductor_variables,criteris = "exclusio1",etiq
 dades<-criteris_exclusio(dades,conductor_variables,criteris = "exclusio1")
 
 
-
 dades<-etiquetar(dades,conductor_variables,camp_descripcio = "descripcio")
 
 ```
@@ -374,7 +407,8 @@ Aparellament segons protocol:
 * Codi únic per professional 
 
 
-```{r}
+
+```{r, eval=FALSE}
 # Preparar dades per matxejar 
 dades<-dades %>% mutate(yearnaix=stringr::str_sub(dnaix,1,4),dtindex,yearindex=stringr::str_sub(dtindex,1,4),DG.TMS,grup=ifelse(DG.TMS=="Yes",1,0))
 
@@ -427,6 +461,65 @@ dades<-dades %>% mutate(incl_matching=if_else(incl_matching==1,1,0,missing = 0))
 
 
 ```
+
+Algoritme Propi **Match_density_incidence.R**
+
+Aparellament segons protocol: 
+- Edat (Any de naixament), sexe, metge assignat (i centre de referència*) amb una proporció de casos i controls de 1:2 
+- Pacient haurà de constar com actiu a data d’inclusió del TMS
+
+* Codi únic per professional 
+
+```{r}
+
+link_source<-paste0("https://github.com/jrealgatius/Stat_codis/blob/master/Match_density_incidence.R","?raw=T")
+devtools::source_url(link_source)
+
+
+# Preparar dades per matxejar 
+dades<-dades %>% mutate(yearnaix=stringr::str_sub(dnaix,1,4),dtindex,yearindex=stringr::str_sub(dtindex,1,4),DG.TMS,grup=ifelse(DG.TMS=="Yes",1,0))
+
+
+llistaPS<-c("sexe","yearnaix","yearindex","idprof")
+num_controls<-2
+
+dt_matching<-dades %>% select(idp,event=grup,sortida,dtindex,llistaPS)
+
+# Generar data de sortida (Data TMS / o Data de censura)     
+dt_matching<-dt_matching %>% mutate(dtindex_case=ifelse(event==1, as.Date(as.character(dtindex),format="%Y%m%d"),NA)) 
+
+## dtindex_control
+dt_matching<-dt_matching %>% mutate (dtindex_control=as.Date(as.character(sortida),format="%Y%m%d")%>% as.numeric())
+
+
+# dtindex_case,dtindex_control
+
+dades_match<-match_density_incidence(dt_matching,
+                        id="idp",
+                        llistaPS=llistaPS,
+                        eventcontrol=F,
+                        reemplacement=F,
+                        numcores=NA,
+                        Ncontrols=num_controls,
+                        seed=123)
+
+
+
+# Numero de controls per conjunt a risk 
+dades_match<-dades_match %>% as_tibble() %>% group_by(.caseid) %>% mutate(n_match=n()-1) %>% ungroup()
+
+# Filtre grups amb controls
+dades_match<-dades_match %>% mutate(incl_matching=if_else(n_match>=1,1,0,missing = 0)) 
+
+# Afegeixo info matching dels idp's matchejats caseid i n_match, incl_matching
+dades<-dades %>% left_join(select(dades_match,idp,caseid=.caseid,n_match,incl_matching),by="idp") 
+
+dades<-dades %>% mutate(incl_matching=if_else(incl_matching==1,1,0,missing = 0)) 
+
+
+
+```
+
 
 # Prioritzacio TMS
 

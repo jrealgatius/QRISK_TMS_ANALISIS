@@ -58,7 +58,7 @@ dt_cataleg<-read_excel(conductor_cataleg)
 
 # Generació data index (Data index)
 
-> Ultima data entre 2007-2010 amb informació necessaria per al calcul de Escala qrisk (Determinacions o problemes de salut) 
+> Data més recent entre 2007-2010 amb informació necessaria per al calcul de Escala qrisk (Determinacions o problemes de salut) 
 > Inclusió : 1 visita entre 2007-2010
 > Ultima data entre 2007-2010 amb informació necessaria per al calcul de Escala qrisk (Determinacions) 
 
@@ -67,7 +67,6 @@ dt_cataleg<-read_excel(conductor_cataleg)
 ```{r}
 # Selecciono agr tal info_data_inclusio==1 per tal de seleccionar data index
 codis_data_inclusio<-dt_cataleg %>% filter(info_data_inclusio==1) %>% select(cod,agr) %>% unique()
-
 
 # Netejar cataleg
 dt_cataleg <- dt_cataleg %>% select(cod,des,agr,agr2,CORTIS,TMS_sub,TMS) %>% unique()
@@ -99,6 +98,8 @@ dt_dataindex<-dt_dataindex %>% transmute(idp,dtindex=dat)
 # Formatejar i agregar
 
 ```{r}
+
+gc()
 # Canviar cod per agr
 dt_cliniques <- dt_cliniques %>% transmute(idp,cod=agr,dat,val) 
 
@@ -113,13 +114,16 @@ dtid_analitiques<-agregar_analitiques(dt_analitiqu,bd.dindex = dt_dataindex,fine
 ```{r}
 # Agregar problemes de salut 
 
-dtid_problemes<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_cataleg ,finestra.dies = c(-Inf,0),prefix = "DG.",camp_agregador = "agr",keep.code = F)
+
+dt_temp <- read_excel(conductor_cataleg) %>% filter(domini=="diagnostics")
+dtid_problemes<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_temp ,finestra.dies = c(-Inf,0),prefix = "DG.",camp_agregador = "agr",keep.code = F,cataleg_mana = T)
+
 
 dtid_problemes2<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_cataleg ,finestra.dies = c(-Inf,0),prefix = "DG.",camp_agregador = "agr2",keep.code = F)
 
 # Agregar TMS tot el periode
-dtid_problemes3<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_cataleg ,finestra.dies = c(-Inf,+Inf),prefix = "DG.",camp_agregador = "TMS_sub",keep.code = F)
-dtid_problemesTMS<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_cataleg ,finestra.dies = c(-Inf,+Inf),prefix = "DG.",camp_agregador = "TMS",keep.code = F)
+dtid_problemes3<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_cataleg ,finestra.dies = c(-Inf,0),prefix = "DG.",camp_agregador = "TMS_sub",keep.code = F)
+dtid_problemesTMS<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_cataleg ,finestra.dies = c(-Inf,0),prefix = "DG.",camp_agregador = "TMS",keep.code = F)
 
 
 dtid_events<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_cataleg ,finestra.dies = c(+1,+Inf),prefix = "EV.",camp_agregador = "agr",keep.code = F)
@@ -128,6 +132,26 @@ dtid_events2<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agre
 
 
 ```
+
+```{r}
+
+# Afegir Diagnostics TMS post inclusió
+
+# Genero columna de TMS's diagnosticats a posteriori de la data index, com un esdeveniment
+
+dtid_eventsTMS_sub<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_cataleg ,finestra.dies = c(+1,+Inf),prefix = "EVTMS.",camp_agregador = "TMS_sub",keep.code = F)
+
+dtid_eventsTMS<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_cataleg ,finestra.dies = c(+1,+Inf),prefix = "EVTMS.",camp_agregador = "TMS",keep.code = F)
+
+#
+dtid_eventsTMS<-dtid_eventsTMS %>% left_join(dtid_eventsTMS_sub,by=c("idp","dtindex"))
+
+
+
+
+```
+
+
 
 # Calcular SD de PAS per individu
 
@@ -259,6 +283,7 @@ dt_total<-
   left_join(dtid_problemesTMS,by=c("idp","dtindex")) %>% 
   left_join(dtid_events,by=c("idp","dtindex")) %>% 
   left_join(dtid_events2,by=c("idp","dtindex")) %>% 
+  left_join(dtid_eventsTMS,by=c("idp","dtindex")) %>% 
   left_join(select(dtid_analitiques,-dtindex) ,by="idp") %>% 
   left_join(select(dtid_tabaquism,-dtindex),by="idp") %>% 
   left_join(select(dtid_variables,-dtindex),by="idp") %>% 
