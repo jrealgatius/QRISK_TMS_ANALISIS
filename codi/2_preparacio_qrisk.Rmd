@@ -160,6 +160,8 @@ dades<-dades %>% mutate_at(vars(starts_with("FP.")),
 # NA --> 0 (Else=1) (No hi ha 0)
 dades<-dades %>% mutate_at(vars(starts_with("DG.")), 
                            funs(ifelse(is.na(.) | 0,0,1))) 
+# Antecedent ECV 
+dades<-dades %>% mutate(DG.ECV = (DG.AIT | DG.CI | DG.AVC_ISQ) %>% as.integer()) 
 
 #   Edat ------------
 dades<-dades %>% 
@@ -191,7 +193,31 @@ dades<-dades %>% recode_to_missings(conductor_variables,rang = "rang_valid")
 
 ## Reclassificació TMS segons farmacs antipsicotics
 
+### Nou criteri de classificació de TMS
+
+Diagnostic de TMS segons TMS Baseline o tractactament amb algun diagnostic durant seguiment
+
+
 ```{r}
+
+# Reclasificació de TMS:  Tractament antipsicòtic basal(tots tenen Diag TMS) OR diagnostic TMS en qualsevol moment (Independentment d'Antipsicòtics)
+
+
+dades<-
+  dades %>% # select(DG.TMS,FP.APSIC,FD.APSIC,EVTMS.TMS) %>% 
+  mutate (DG.TMS_DIAG= DG.TMS) %>%
+  mutate (DG.APSIC=if_else(DG.TMS==0 & (FD.APSIC==1 | FP.APSIC==1 ),1,0)) %>% 
+  mutate (DG.TMS= if_else(DG.TMS_DIAG==1 | ((FP.APSIC>0 | FD.APSIC>0) & (!is.na(EVTMS.TMS) & EVTMS.TMS>0)>0),1,0)) 
+  
+
+
+
+```
+
+
+### S'exclou el seguent criteri de classificacio de TMS
+
+```{r, eval=FALSE}
 
 # PACIENTS NO TMS ≤65 ANYS AMB TRACTAMENT ANTIPSICÒTIC SENSE DIAGNÒSTIC DE DEMÈNCIA
 # Incloure’ls com a TMS, però no els podrem classificar a cap subgrup diagnòstic, per tant, caldria crear una variable per identificar-los.
@@ -204,7 +230,6 @@ dades<-dades %>%
   mutate (DG.APSIC=if_else(DG.TMS==0 & (FD.APSIC==1 | FP.APSIC==1 ) & edat<=65 & DG.DEMENCIA==0,1,0)) %>% 
   mutate (DG.TMS_DIAG= DG.TMS) %>% 
   mutate (DG.TMS= if_else(DG.APSIC==1,1,DG.TMS)) 
-
 
 
 # # Revisió de casos
@@ -372,6 +397,29 @@ dades<-factoritzar.NO.YES(dades,columna = "factoritzar.yes.no",taulavariables = 
 
 # Exclusions I
 
+
+
+```{r}
+
+# Tractats amb antipsicotics sense diagnostic de TMS
+# Tractats amb Hipolipemiants
+
+
+dades<-dades %>% 
+  mutate(FP.HIPOL=if_else(FP.HIPOL=="Yes" | FD.HIPOL=="Yes","Yes","No")) %>% 
+  mutate(FD.HIPOL=if_else(FP.HIPOL=="Yes" | FD.HIPOL=="Yes","Yes","No"))
+ 
+
+dades<-
+  dades %>% 
+  mutate(ANT_APSIC_NOTMS=if_else(DG.TMS=="No" & (FD.APSIC=="Yes" | FP.APSIC=="Yes"),"Yes","No",missing = "Yes"))
+
+
+```
+
+
+
+
 > Flow Chart
 
 ```{r, include=TRUE}
@@ -379,9 +427,12 @@ dades<-factoritzar.NO.YES(dades,columna = "factoritzar.yes.no",taulavariables = 
 dades<-dades %>% filter (!(situacio=="D" & sortida<=dtindex)) 
 
 # Faig copia dades preexclusions
-dades_preexclusions<-dades %>% select(extreure.variables("ordre",conductor_variables,dt=dades))
+dades_preexclusions<-dades %>% select(extreure.variables("ordre",conductor_variables,sheet="exclusions",dt=dades))
 
-criteris_exclusio_diagrama(dades,conductor_variables,criteris = "exclusio1",etiquetes = "lab_exc",ordre="ordre",sequencial = F)
+
+criteris_exclusio_diagrama(dades,conductor_variables,sheet="exclusions",
+                           criteris = "exclusio1",etiquetes = "lab_exc",
+                           ordre="ordre",sequencial = F)
 
 
 
@@ -389,10 +440,11 @@ criteris_exclusio_diagrama(dades,conductor_variables,criteris = "exclusio1",etiq
 
 ```{r}
 
-dades<-criteris_exclusio(dades,conductor_variables,criteris = "exclusio1")
+dades<-criteris_exclusio(dades,conductor_variables,sheet="exclusions",criteris = "exclusio1")
 
 
 dades<-etiquetar(dades,conductor_variables,camp_descripcio = "descripcio")
+
 
 ```
 
@@ -520,14 +572,6 @@ dades<-dades %>% mutate(incl_matching=if_else(incl_matching==1,1,0,missing = 0))
 
 ```
 
-
-# Prioritzacio TMS
-
-```{r}
-
-
-
-```
 
 
 # Salvar dades planes
