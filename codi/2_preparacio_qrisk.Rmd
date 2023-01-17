@@ -123,10 +123,13 @@ library(compareGroups)
 library(QRISK3)
 # library(flexdashboard)
 library(DT)
+library(dplyr)
 
+library(Macedonia)
+library(FormatGe)
 
-link_source<-paste0("https://github.com/jrealgatius/Stat_codis/blob/master/funcions_propies.R","?raw=T")
-devtools::source_url(link_source)
+# link_source<-paste0("https://github.com/jrealgatius/Stat_codis/blob/master/funcions_propies.R","?raw=T")
+# devtools::source_url(link_source)
 
 conductor_variables<-here::here("variables_qrisk.xls")
 
@@ -140,6 +143,8 @@ conductor_variables<-here::here("variables_qrisk.xls")
 if (params$fitxers_test) fitxer_dades<-"dades_test_crues.Rds" else fitxer_dades<-"dades_crues.Rds"
 
 dades<-readRDS(here::here("dades",fitxer_dades))
+
+
 
 ```
 
@@ -198,7 +203,8 @@ dades<-dades %>% recode_to_missings(conductor_variables,rang = "rang_valid")
 Diagnostic de TMS segons TMS Baseline o tractactament amb algun diagnostic durant seguiment
 
 
-```{r}
+
+```{r,eval=FALSE}
 
 # Reclasificació de TMS:  Tractament antipsicòtic basal(tots tenen Diag TMS) OR diagnostic TMS en qualsevol moment (Independentment d'Antipsicòtics)
 
@@ -422,7 +428,7 @@ dades<-
 
 > Flow Chart
 
-```{r, include=TRUE}
+```{r, include=TRUE, eval=FALSE}
 # Elimino exitus en dataindex
 dades<-dades %>% filter (!(situacio=="D" & sortida<=dtindex)) 
 
@@ -440,7 +446,7 @@ criteris_exclusio_diagrama(dades,conductor_variables,sheet="exclusions",
 
 ```{r}
 
-dades<-criteris_exclusio(dades,conductor_variables,sheet="exclusions",criteris = "exclusio1")
+# dades<-criteris_exclusio(dades,conductor_variables,sheet="exclusions",criteris = "exclusio1")
 
 
 dades<-etiquetar(dades,conductor_variables,camp_descripcio = "descripcio")
@@ -522,7 +528,7 @@ Aparellament segons protocol:
 
 * Codi únic per professional 
 
-```{r}
+```{r, eval=FALSE}
 
 link_source<-paste0("https://github.com/jrealgatius/Stat_codis/blob/master/Match_density_incidence.R","?raw=T")
 devtools::source_url(link_source)
@@ -573,15 +579,102 @@ dades<-dades %>% mutate(incl_matching=if_else(incl_matching==1,1,0,missing = 0))
 ```
 
 
+```{r preparacio, include=FALSE}
+
+
+# Preparació residual ECV i temps
+
+# Event CVD 
+dades<-dades %>% mutate(EV.CVD=pmin(EV.CI,EV.AVC_ISQ,EV.AIT,na.rm = T))
+
+# Calculo variable temps lliure d'EVENT i dicotomitzo variables event
+dades<-
+  dades %>% mutate_at(vars(starts_with("EV.")),list("temps"=~((ymd(.)-ymd(dtindex)) %>% as.numeric))) %>% 
+          mutate_at(vars(ends_with("_temps")),~if_else(is.na(.),(ymd(sortida)-ymd(dtindex)) %>% as.numeric,.)) %>%
+          mutate_at(vars(ends_with("_temps")),~./365.25) %>%
+          mutate_at(vars(starts_with("EV.") & !ends_with("_temps")),~if_else(.>0,1,0,missing = 0))
+
+# Verificació
+# dades %>% select(extreure.variables("events",conductor_variables))
+
+# Exitus durant seguiment
+dades<-dades %>% mutate(exitus=if_else(situacio=="D",1,0))
+
+
+# Generar variable que computi combinacions de variables 
+
+dades<-
+  comptar_valors(dades,variables =extreure.variables("TMS",conductor_variables),"Yes") %>% 
+  rename(N_TMS=num_valors)
+
+# grups d'edat
+dades<-dades %>% recodificar(conductor_variables,criteris = "recode")
+
+# mes grups d'edat
+dades<-dades %>% mutate(edat_grup=Hmisc::cut2(edat,g=10),
+                        agrupacio=paste0(sexe,": ",edat.cat7))
+
+
+```
+
+```{r preparacio2,include=FALSE}
+# Fer Agrupacions QRisk i regicor 
+
+# dades<-dades %>% recodificar2(conductor_variables,"recode2",prefix = "cat",missings = F)
+dades<-dades %>% FormatGe::recodificar(conductor_variables,"recode2",prefix = ".cat",missings = F)
+
+dades<-dades %>% mutate_at(c("QRISK3_2017","regicor"),.funs=list(catQ=~Hmisc::cut2(.,g=3)))
+
+# Categorització de qmedea
+dades<-dades %>% mutate(qmedea=ifelse(qmedea=="","NA",qmedea)) 
+
+dades<-etiquetar_valors(dades,conductor_variables,fulla="value_label")
+
+
+```
+
+
+
+```{r prioritzacio_TMS, include=FALSE}
+# Arreglar priorització TMS segons conductor
+
+# Generar TMS excloents segons criteris prioritaris
+vars_TMS<-extreure.variables("TMS",conductor_variables)
+
+# Ull no estan totes les combinacions (només les de la Base de dades)
+combi_TMS <- read_conductor(conductor_variables,sheet="solapaments_TMS") %>% 
+  tidyr::unite(ES_BI_AL_DEP,vars_TMS,sep="_") %>% 
+  tidyr::unite(ES_BI_AL_DEP_nou,paste0(vars_TMS,2),sep="_") %>% 
+  tidyr::separate(ES_BI_AL_DEP_nou,vars_TMS,sep="_") %>% 
+  select(ES_BI_AL_DEP,vars_TMS)
+
+
+# Unir a dades solapaments arreglats de diagnostics
+dades<-dades %>% 
+  tidyr::unite(ES_BI_AL_DEP,vars_TMS,sep="_") %>% 
+  left_join(combi_TMS)
+
+
+# Desscriptiva de combiacions de TMS
+dt_temp<-
+  dades %>% filter(N_TMS>1) %>% 
+  select(DG.TMS,N_TMS,extreure.variables("TMS",conductor_variables)) %>% 
+  tidyr::unite(ES_BI_AL_DEP,extreure.variables("TMS",conductor_variables),sep="_")
+ 
+descrTable(dt_temp,max.xlev = 50, method = 3, Q1=0,Q3=1,extra.labels = c("","","")) %>% 
+   export2md()
+
+
+```
 
 # Salvar dades planes
 
 ```{r}
 if (params$fitxers_test) fitxer_dades<-"dades_test.Rds" else fitxer_dades<-"dades.Rds"
-if (params$fitxers_test) fitxer_dades_preexclusions<-"dadestest_preexclusions.Rds" else  fitxer_dades_preexclusions<-"dades_preexclusions.Rds"
+# if (params$fitxers_test) fitxer_dades_preexclusions<-"dadestest_preexclusions.Rds" else  fitxer_dades_preexclusions<-"dades_preexclusions.Rds"
 
 saveRDS(dades,file = here::here("dades", fitxer_dades))
-saveRDS(dades_preexclusions,file = here::here("dades", fitxer_dades_preexclusions))
+# saveRDS(dades_preexclusions,file = here::here("dades", fitxer_dades_preexclusions))
 
 
 

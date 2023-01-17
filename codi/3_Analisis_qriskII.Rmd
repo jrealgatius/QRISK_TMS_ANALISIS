@@ -1,0 +1,193 @@
+---
+title: "Predicció del risc cardiovascular mitjançant dos escales en pacients  amb trastorn mental sever: estudi de cohorts retrospectiu. Informe II/V"
+author: "Jordi Real" 
+website: "https://github.com/USR-DAPCAT/"
+date: "`r format(Sys.time(), '%d %B, %Y')`" 
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+    fig_caption: true
+    css: logos_css/usr_styles.css
+params:
+  fitxers_test: TRUE # FALSE #TRUE
+  subgrup: "DG.ESQUIZO"  # "NA" "DG.ALTRES_PSICOTICS" "DG.ESQUIZO" "DG.BIPOLAR_MANIA" "DG.ALTRES_PSICOTICS"
+  reevaluar: yes
+subtitle: "`r paste0('Part II. GRUP:',params$subgrup)`"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+
+
+```{=html}
+<script>
+   $(document).ready(function() {
+     $head = $('#header');
+     $head.prepend('<img src=\"https://www.idiapjgol.org/images/logo.png\" style=\"float: right ;width: 130px;\"/>')
+     $head.prepend('<img src=\"https://avatars2.githubusercontent.com/u/57066591?s=200&v=4\" style=\"text-align: center;margin:auto;width: 80px;\"/>')
+   });
+</script>
+```
+::: {.watermark}
+DRAFT
+:::
+
+------------------------------------------------------------------------
+
+
+
+```{r setup2, include=FALSE,eval=params$reevaluar}
+
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, include=T,size="huge")
+
+# Lectura de dades     
+
+library(lubridate)
+library(compareGroups)
+# library(flexdashboard)
+# library(DT)
+
+link_source<-paste0("https://github.com/jrealgatius/Stat_codis/blob/master/funcions_propies.R","?raw=T")
+devtools::source_url(link_source)
+
+# source(here::here("codi/global_lectura.R"))
+source(here::here("codi/funcions_qrisk.R"))
+
+# Si fitxers_test  carrego fitxers mostra 
+# funcions_lectura_dades(params$fitxers_test)
+
+conductor_variables<-here::here("variables_qrisk.xls")
+
+
+```
+
+
+
+```{r lectura3, eval=params$reevaluar}
+if (params$fitxers_test) fitxer_dades<-"dades_test.Rds" else fitxer_dades<-"dades.Rds"
+if (params$fitxers_test) fitxer_dades_preexclusions<-"dadestest_preexclusions.Rds" else fitxer_dades_preexclusions<-"dades_preexclusions.Rds"
+
+dades<-readRDS(here::here("dades",fitxer_dades)) %>% netejar_espais()
+dades_preexclusions<-readRDS(here::here("dades",fitxer_dades_preexclusions)) %>% netejar_espais()
+
+
+dades<-criteris_exclusio(dades,conductor_variables,sheet="exclusions",criteris = "exclusio1")
+
+conductor_variables<-here::here("variables_qrisk.xls")
+
+# Aplicar exclusions
+dades<-dades %>% criteris_exclusio(dades,taulavariables=conductor_variables,sheet="exclusions",
+                           criteris = "exclusio3")
+
+
+# Filtrar si hi ha analisis de subgrups
+parametre_subgrup<-params$subgrup
+if (params$subgrup!="NA") dades<-dades %>% filter(!!sym(parametre_subgrup)=="Yes")
+
+```
+
+
+```{r}
+
+
+llistaevents<-extreure.variables("events",conductor_variables)
+llista_temps<-extreure.variables("t_event",conductor_variables)
+
+```
+
+
+
+# 4.4. Descriptiva d'events i taxes d'incidència estratificades per categories de regicor Qrisk
+
+```{r}
+
+dt_temp<-dades %>% filter(regicor>=0 & QRISK3_2017>=0)
+
+# Summary events estratificat per QRISK3_2017.cat
+dt_temp %>% split(.$QRISK3_2017.cat,drop=T) %>% map_df(
+  function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
+  .id="Grup") %>% 
+  etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup QRISK. Complete cases Regicor+QRisc") %>% kableExtra::kable_styling()
+
+# Summary events estratificat per QRISK3_2017.cat
+dades %>% split(.$QRISK3_2017.cat,drop=T) %>% map_df(
+  function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
+  .id="Grup") %>% 
+  etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup QRISK. (Pob TMS)") %>% kableExtra::kable_styling()
+
+# Summary events estratificat per Sexe
+dt_temp %>% split(.$regicor.cat,drop=T) %>% map_df(
+  function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
+  .id="Grup") %>% 
+  etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup de REGICOR. Complete cases Regicor+QRisc") %>% kableExtra::kable_styling()
+
+# Summary events estratificat per Sexe
+dades %>% split(.$regicor.cat,drop=T) %>% map_df(
+  function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
+  .id="Grup") %>% 
+  etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup de REGICOR. (Pob TMS)") %>% kableExtra::kable_styling()
+
+
+
+
+
+
+
+```
+
+
+
+
+```{r}
+
+dt_temp<-dades %>% filter(regicor>=0 & QRISK3_2017>=0)
+
+
+# Summary events estratificat per QRISK3_2017.cat
+dt_temp %>% split(.$QRISK3_2017_catQ,drop=T) %>% map_df(
+  function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
+  .id="Grup") %>% 
+  etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup QRISK. Complete cases Regicor+QRisc") %>% kableExtra::kable_styling()
+
+# Summary events estratificat per QRISK3_2017.cat
+dades %>% split(.$QRISK3_2017_catQ,drop=T) %>% map_df(
+  function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
+  .id="Grup") %>% 
+  etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup QRISK. (Pob TMS)") %>% kableExtra::kable_styling()
+
+# Summary events estratificat per Sexe
+dt_temp %>% split(.$regicor_catQ,drop=T) %>% map_df(
+  function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
+  .id="Grup") %>% 
+  etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup de REGICOR. Complete cases Regicor+QRisc") %>% kableExtra::kable_styling()
+
+
+# Summary events estratificat per Sexe
+dades %>% split(.$regicor_catQ,drop=T) %>% map_df(
+  function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
+  .id="Grup") %>% 
+  etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup de REGICOR. (Pob TMS)") %>% kableExtra::kable_styling()
+
+
+```
+
+
+
+
+&nbsp;
+<hr />
+<p style="text-align: center;">A work by $Jordi Real$ </a></p>
+<p style="text-align: center;">$Llepali System$ </a></p>
+<p style="text-align: center;"><span style="color: #808080;"><em><https://github.com/USR-DAPCAT/></em></span></p>
+

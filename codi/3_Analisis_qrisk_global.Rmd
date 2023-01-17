@@ -246,10 +246,10 @@ conductor_variables<-here::here("variables_qrisk.xls")
 
 ```{r lectura}
 if (params$fitxers_test) fitxer_dades<-"dades_test.Rds" else fitxer_dades<-"dades.Rds"
-if (params$fitxers_test) fitxer_dades_preexclusions<-"dadestest_preexclusions.Rds" else fitxer_dades_preexclusions<-"dades_preexclusions.Rds"
+# if (params$fitxers_test) fitxer_dades_preexclusions<-"dadestest_preexclusions.Rds" else fitxer_dades_preexclusions<-"dades_preexclusions.Rds"
 
 dades<-readRDS(here::here("dades",fitxer_dades)) %>% netejar_espais()
-dades_preexclusions<-readRDS(here::here("dades",fitxer_dades_preexclusions)) %>% netejar_espais()
+# dades_preexclusions<-readRDS(here::here("dades",fitxer_dades_preexclusions)) %>% netejar_espais()
 
 
 ```
@@ -296,7 +296,7 @@ dt_problemes_TMS<-
 
 # Diagrames d'exclusions
 
-```{r diagrames}
+```{r diagrames, eval=FALSE}
 
 criteris_exclusio_diagrama(dades,conductor_variables,sheet="exclusions",
                            grups = "DG.TMS",criteris = "exclusio2",etiquetes = "descripcio",ordre="ordre",sequencial = F)
@@ -310,99 +310,10 @@ dades<-criteris_exclusio(dades,conductor_variables,sheet="exclusions",criteris =
 ```
 
 
-```{r preparacio, include=FALSE}
-
-
-# Preparació residual ECV i temps
-
-# Event CVD 
-dades<-dades %>% mutate(EV.CVD=pmin(EV.CI,EV.AVC_ISQ,EV.AIT,na.rm = T))
-
-# Calculo variable temps lliure d'EVENT i dicotomitzo variables event
-dades<-
-  dades %>% mutate_at(vars(starts_with("EV.")),list("temps"=~((ymd(.)-ymd(dtindex)) %>% as.numeric))) %>% 
-          mutate_at(vars(ends_with("_temps")),~if_else(is.na(.),(ymd(sortida)-ymd(dtindex)) %>% as.numeric,.)) %>%
-          mutate_at(vars(ends_with("_temps")),~./365.25) %>%
-          mutate_at(vars(starts_with("EV.") & !ends_with("_temps")),~if_else(.>0,1,0,missing = 0))
-
-# Verificació
-# dades %>% select(extreure.variables("events",conductor_variables))
-
-# Exitus durant seguiment
-dades<-dades %>% mutate(exitus=if_else(situacio=="D",1,0))
-
-
-# Generar variable que computi combinacions de variables 
-
-dades<-
-  comptar_valors(dades,variables =extreure.variables("TMS",conductor_variables),"Yes") %>% 
-  rename(N_TMS=num_valors)
-
-# grups d'edat
-dades<-dades %>% recodificar(conductor_variables,criteris = "recode")
-
-# mes grups d'edat
-dades<-dades %>% mutate(edat_grup=Hmisc::cut2(edat,g=10),
-                        agrupacio=paste0(sexe,": ",edat.cat7))
-
-
-```
 
 
 
-```{r, include=FALSE, eval=FALSE}
-
-# 1 Exploratori
-
-## 1.1. Descriptiva Antipsicotics (Facturats o prescrits en qualsevol moment) en PACIENTS NO TMS 
-
-dt_NOTMS<-dades %>% filter(DG.TMS=="No")
-
-dt_APSIC_resum<-
-  dt_facturats_APSIC %>% group_by(idp) %>% slice(1) %>% ungroup() %>% mutate(FX_APSIC=1) %>% select(idp,FX_APSIC)
-
-dt_APSIC_resum<-
-  dt_prescrits_APSIC %>% group_by(idp) %>% slice(1) %>% ungroup() %>% mutate(FX_APSIC=1) %>% select(idp,FX_APSIC) %>% 
-  bind_rows(dt_APSIC_resum) %>% 
-  group_by(idp) %>% slice(1) %>% ungroup()
-
-
-# Fusionar algun Antipsicotic 
-dt_NOTMS<-dt_NOTMS %>% 
-  mutate(idp=as.character(idp)) %>% 
-  left_join(dt_APSIC_resum,by="idp") %>% 
-  mutate(FX_APSIC=if_else(FX_APSIC==1,1,0,missing = 0))
-
-
-formu<-formula.text("TMS",y="FX_APSIC",taulavariables =  conductor_variables)
-
-
-dt_NOTMS<-dt_NOTMS %>% 
-  mutate(edad=as.numeric((ymd(dtindex)-ymd(dnaix))/365.25)) %>% 
-  mutate(edad_grup=if_else(edad>65,"Major 65 anys","Menor o igual 65 anys "))
-
-### Descriptiva dates 
-dt_codis_antisic %>% distinct(cod) %>% kable(caption = "Llistat de codis inclosos") %>% kableExtra::kable_styling()
-
-dt_prescrits_APSIC %>% semi_join(dt_NOTMS,by="idp") %>% 
-  summarise(N_patients=n_distinct(idp),min(dat),max(dat), N_patients=n_distinct(idp)) %>% kable(caption = "Dates d'històric de prescripcions d'antipsicotics de codis inclosos") %>% kableExtra::kable_styling()
-
-dt_facturats_APSIC %>% semi_join(dt_NOTMS,by="idp") %>%
-  summarise(N_patients=n_distinct(idp),min(dat),max(dat)) %>% kable(caption = "Dates d'històric de facturacions d'antipsicotics de codis inclosos") %>% kableExtra::kable_styling()
-
-descrTable(edad_grup~FX_APSIC,data=dt_NOTMS,show.p.overall = F, method = 3,show.all = T) %>% 
-  export2md()
-
-
-
-```
-
-
-
-
-
-
-```{r aplicacio_criteris}
+```{r aplicacio_criteris, eval=FALSE}
 conductor_variables<-here::here("variables_qrisk.xls")
 
 # Aplicació de criteris d'exclusió
@@ -419,69 +330,8 @@ dades<-dades %>% criteris_exclusio(dades,taulavariables=conductor_variables,shee
 
 ```
 
-```{r preparacio2,include=FALSE}
-# Fer Agrupacions QRisk i regicor 
-
-dades<-dades %>% recodificar2(conductor_variables,"recode2",prefix = "cat",missings = F)
-
-dades<-dades %>% mutate_at(c("QRISK3_2017","regicor"),.funs=list(catQ=~Hmisc::cut2(.,g=3)))
-
-```
 
 
-
-```{r Descriptiva_TMS, eval=FALSE, include=FALSE}
-
-
-## 1.2. Descriptiva de subgrups de TMS i combinacions
-
-# Descriptiva
-descrTable(formula.text("TMS","sexe",taulavariables=conductor_variables),data=dades,hide = "No",show.all = T,show.p.overall = F,extra.labels = c("","","")) %>% export2md()
-
-# Desscriptiva de combiacions de TMS
-dt_temp<-
-  dades %>% filter(N_TMS>1) %>% 
-  select(DG.TMS,N_TMS,extreure.variables("TMS",conductor_variables)) %>% 
-  tidyr::unite(ES_BI_AL_DEP,extreure.variables("TMS",conductor_variables),sep="_")
- 
-descrTable(~N_TMS,data=dades,max.xlev = 20, method = 3, Q1=0,Q3=1,extra.labels = c("","","")) %>% 
-  export2md(caption = "Summary descriptives table of number of TMS diagnostics")
-
-descrTable(dt_temp,max.xlev = 50, method = 3, Q1=0,Q3=1,extra.labels = c("","","")) %>% 
-  export2md()
-
-
-```
-
-```{r prioritzacio_TMS, include=FALSE}
-# Arreglar priorització TMS segons conductor
-
-# Generar TMS excloents segons criteris prioritaris
-vars_TMS<-extreure.variables("TMS",conductor_variables)
-
-# Ull no estan totes les combinacions (només les de la Base de dades)
-combi_TMS <- read_conductor(conductor_variables,sheet="solapaments_TMS") %>% 
-  tidyr::unite(ES_BI_AL_DEP,vars_TMS,sep="_") %>% 
-  tidyr::unite(ES_BI_AL_DEP_nou,paste0(vars_TMS,2),sep="_") %>% 
-  tidyr::separate(ES_BI_AL_DEP_nou,vars_TMS,sep="_") %>% 
-  select(ES_BI_AL_DEP,vars_TMS)
-
-# Unir a dades solapaments arreglats de diagnostics
-dades<-dades %>% 
-  tidyr::unite(ES_BI_AL_DEP,vars_TMS,sep="_") %>% 
-  left_join(combi_TMS)
-
-# Desscriptiva de combiacions de TMS
-dt_temp<-
-  dades %>% filter(N_TMS>1) %>% 
-  select(DG.TMS,N_TMS,extreure.variables("TMS",conductor_variables)) %>% 
-  tidyr::unite(ES_BI_AL_DEP,extreure.variables("TMS",conductor_variables),sep="_")
- 
-descrTable(dt_temp,max.xlev = 50, method = 3, Q1=0,Q3=1,extra.labels = c("","","")) %>% 
-  export2md()
-
-
-```
 
 
 ```{r filtrar_subgrups}
@@ -494,14 +344,6 @@ if (params$subgrup!="NA") dades<-dades %>% filter(!!sym(parametre_subgrup)=="Yes
 
 ```
 
-```{r}
-# Categorització de qmedea
-dades<-dades %>% mutate(qmedea=ifelse(qmedea=="","NA",qmedea)) 
-
-dades<-etiquetar_valors(dades,conductor_variables,fulla="value_label")
-
-
-```
 
 
 ```{r}
@@ -612,11 +454,13 @@ dades<-
   mutate(dies.TMS_post=(ymd(dataTMS_post)-ymd(dtindex)) %>% as.numeric())
 
 
-formu<-formula.text("explo",y="",taulavariables = conductor_variables)
+formu<-formula.text("explo",y="grup",taulavariables = conductor_variables, dt=dades)
 
 descrTable(formu,dades, method = 2,Q1=0, Q3=1,extra.labels = c("","",""),hide = "No") %>% 
   export2md(caption = "Descriptiva exploratoria")
   
+
+
 
 # table(dades$qmedea,dades$ruralitat) %>% kable(caption="Medea x Ruralitat") %>% kableExtra::kable_styling()
 
@@ -901,7 +745,6 @@ dades %>% split(.$qmedea,drop=T) %>% map_df(
   kable(digits = 4,caption = "Descriptiva d'esdeventiment. (Pob TMS)") %>% kableExtra::kable_styling()
 
 
-
 # Summary events estratificat per Sexe
 dt_temp %>% split(.$ruralitat,drop = T) %>% map_df(
   function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
@@ -929,7 +772,7 @@ dt_temp %>% split(.$QRISK3_2017.cat,drop=T) %>% map_df(
   function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
   .id="Grup") %>% 
   etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
-  kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup QRISK") %>% kableExtra::kable_styling()
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup QRISK. Complete cases Regicor+QRisc") %>% kableExtra::kable_styling()
 
 # Summary events estratificat per QRISK3_2017.cat
 dades %>% split(.$QRISK3_2017.cat,drop=T) %>% map_df(
@@ -943,7 +786,7 @@ dt_temp %>% split(.$regicor.cat,drop=T) %>% map_df(
   function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
   .id="Grup") %>% 
   etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
-  kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup de REGICOR") %>% kableExtra::kable_styling()
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup de REGICOR. Complete cases Regicor+QRisc") %>% kableExtra::kable_styling()
 
 # Summary events estratificat per Sexe
 dades %>% split(.$regicor.cat,drop=T) %>% map_df(
@@ -953,29 +796,27 @@ dades %>% split(.$regicor.cat,drop=T) %>% map_df(
   kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup de REGICOR. (Pob TMS)") %>% kableExtra::kable_styling()
 
 
+
+
+
+
+
 ```
 
-# MERDA A PARTIR DAQUI NO FUNCIONA CORRECTAMENT
+
+
 
 ```{r}
 
 dt_temp<-dades %>% filter(regicor>=0 & QRISK3_2017>=0)
+
 
 # Summary events estratificat per QRISK3_2017.cat
 dt_temp %>% split(.$QRISK3_2017_catQ,drop=T) %>% map_df(
   function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
   .id="Grup") %>% 
   etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
-  kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup QRISK") %>% kableExtra::kable_styling()
-
-
-```
-
-
-
-```{r}
-
-dt_temp<-dades %>% filter(regicor>=0 & QRISK3_2017>=0)
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup QRISK. Complete cases Regicor+QRisc") %>% kableExtra::kable_styling()
 
 # Summary events estratificat per QRISK3_2017.cat
 dades %>% split(.$QRISK3_2017_catQ,drop=T) %>% map_df(
@@ -989,12 +830,8 @@ dt_temp %>% split(.$regicor_catQ,drop=T) %>% map_df(
   function(dt=.x) map2_df(llistaevents,llista_temps,~resum_events_v3(dt,evento=.x,temps=.y,valorevent=1),.id="event"),
   .id="Grup") %>% 
   etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
-  kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup de REGICOR") %>% kableExtra::kable_styling()
-```
+  kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup de REGICOR. Complete cases Regicor+QRisc") %>% kableExtra::kable_styling()
 
-# AQUEST NO EL PRINTA
-
-```{r}
 
 # Summary events estratificat per Sexe
 dades %>% split(.$regicor_catQ,drop=T) %>% map_df(
@@ -1003,12 +840,14 @@ dades %>% split(.$regicor_catQ,drop=T) %>% map_df(
   etiquetar_taula(camp="event",taulavariables = conductor_variables) %>% 
   kable(digits = 4,caption = "Descriptiva d'esdeventiment per grup de REGICOR. (Pob TMS)") %>% kableExtra::kable_styling()
 
+
 ```
 
 
-# 4.5. Descriptiva d'events i taxes d'incidència estratificades per grup d'edat x sexe
 
-### Només event CV
+# 4.5. Descriptiva d'events i taxes incidencia estratificades per grups (edat x sexe)
+
+### Només event CV (jejejjej)
 
 
 ```{r}
@@ -1302,6 +1141,16 @@ descrTable(formu,dt_temp, method = 2,Q1=0, Q3=1,show.n = T, show.all = T) %>%
     export2md()
 
 
-
-
 ```
+
+
+
+
+&nbsp;
+<hr />
+<p style="text-align: center;">A work by $Jordi Real$ $Rai Puig$ </a></p>
+<p style="text-align: center;">$Llepali System$ </a></p>
+<p style="text-align: center;"><span style="color: #808080;"><em><https://github.com/USR-DAPCAT/></em></span></p>
+
+
+

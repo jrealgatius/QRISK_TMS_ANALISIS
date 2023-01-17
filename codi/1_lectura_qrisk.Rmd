@@ -19,13 +19,15 @@ nmostra=Inf
 
 
 library(lubridate)
-
+library(dplyr)
 conductor_cataleg<-here::here("cataleg_qrisk.xls")
 
 # Carregar funcions de lectura de dades ------------------
 
-link_source<-paste0("https://github.com/jrealgatius/Stat_codis/blob/master/funcions_propies.R","?raw=T")
-devtools::source_url(link_source)
+# link_source<-paste0("https://github.com/jrealgatius/Stat_codis/blob/master/funcions_propies.R","?raw=T")
+# devtools::source_url(link_source)
+
+library(Platan)
 
 source(here::here("codi/global_lectura.R"))
 
@@ -50,13 +52,236 @@ dt_visites<-nmostra %>% LLEGIR.VISITES()
 dt_visitesagr<-nmostra %>% LLEGIR.VISITES_AGR()
 
 # Llegeix cataleg_qrisk.xls 
-dt_cataleg<-read_excel(conductor_cataleg)
+dt_cataleg<-read_conductor(conductor_cataleg)
 
 
 ```
 
 
-# Generació data index (Data index)
+```{r}
+
+
+
+```
+
+
+# NOVA Generació data index (Data index) III
+
+> 2007-2017
+
+Casos: 
+
+TMS< 2007  (PREVALENT)--> data primera visita de seguiment (>2007- final)
+TMS > 2007 (INCIDENT) --> Data primera visita post Registre Diagnostic TMS
+
+Controls: 
+
+- noTMS en cap moment
+- Aparellats per : UP, Any_naix, Sexe 
+- En mateixa visita: Any_visita
+
+- Exclusio previa: 
+* Potencials controls: Sense tractament antipsicotics (Qualsevol moment)
+* Event CV previ a data d'inclusió (Ni casos ni controls)
+* Demencia previa (No casos ni controls)
+
+
+
+```{r, eval=TRUE}
+# Codis TMS 
+codis_TMS<-dt_cataleg %>% filter(TMS>0) %>% select(domini,cod,TMS,TMS_sub)
+data_TMS<-dt_problemes %>% 
+  semi_join(codis_TMS,by="cod") %>% group_by(idp) %>% slice(which.min(dat)) %>% ungroup() %>% select(idp,dtTMS=dat)
+
+data_TMS<-data_TMS %>% mutate(TMS2007=if_else(dtTMS<20070101,1,0))
+
+# Visites 
+dtany_visita<-
+  dt_visites %>% mutate(any_visita=stringr::str_sub(dat,1,4)) %>% 
+  group_by(idp,any_visita) %>% slice(which.max(dat)) %>% ungroup() %>% 
+  select(idp,dtvisita=dat,any_visita) 
+  
+# Antipsicotics
+codis_antipsicotics<-dt_cataleg %>% filter(agr=="APSIC") %>% distinct(cod) 
+dt_temp1 <- dt_facturats %>% semi_join(codis_antipsicotics,by="cod") %>% transmute(idp,FX_antipsicotic=1)
+dt_temp2 <- dt_prescrits %>% semi_join(codis_antipsicotics,by="cod") %>% transmute(idp,FX_antipsicotic=1)
+dt_antipsicotic <- dt_temp1 %>% bind_rows(dt_temp2) %>% distinct()
+#
+#
+# Fusió total població
+# Població:
+dt_pob_potencial<-
+  dt_poblacio %>% left_join(data_TMS,by="idp") %>% select(idp,sexe,idup,dnaix,situacio,entrada,sortida,dtTMS,TMS2007) %>% 
+  left_join(dt_antipsicotic,by="idp") 
+
+```
+
+# Assignació de dates d'inclusió 
+
+- Data: 
+- Primera visita de seguiment posterior (>2007- final) (CASOS)
+- Any diagnostic en Casos
+- Any previ censura (Trasllat o mort)  
+- Any amb visita en Controls
+
+```{r}
+
+# dt_cas_potencial
+dt_cas_potencial<-dt_pob_potencial %>% filter(dtTMS>0) 
+
+# dt_cnt_potencial
+dt_cnt_potencial<-dt_pob_potencial %>% filter(is.na(dtTMS) & is.na(FX_antipsicotic))
+
+
+# Dates potencials de selecció de CASOS (Year)
+# casos
+# TMS< 2007  (PREVALENT)--> data primera visita de seguiment (>2007- final)
+# TMS > 2007 (INCIDENT) --> Data primera visita post Registre Diagnostic TMS
+dt_dindex_cas<-
+  dt_cas_potencial %>% select(idp,sortida,dtTMS) %>% 
+  left_join(select(dt_visitesagr,idp,visita_year=anyo),by="idp") %>% distinct() %>% 
+  filter(visita_year>=stringr::str_sub(dtTMS,1,4)) %>%   # Any visita en any o posterior a TMS
+  
+  filter(visita_year< stringr::str_sub(sortida,1,4)) %>%  # Visita --> Any previ a censura 
+
+  group_by(idp) %>% slice(which.min(visita_year)) %>% ungroup() %>% 
+  mutate(year_index=visita_year) %>% 
+  transmute(idp,grup=1,year_index)
+#  
+# Dates potencials de selecció de CONTROLS (Year)
+dt_dindex_cnt<-
+  dt_cnt_potencial %>% select(idp,sortida) %>% 
+  left_join(select(dt_visitesagr,idp,visita_year=anyo),by="idp") %>% distinct() %>% 
+  transmute(idp,year_index=visita_year,sortida) %>% 
+  filter(year_index< stringr::str_sub(sortida,1,4)) %>% # Any previ a censura 
+  select(idp,year_index) %>% 
+  transmute(idp,grup=0,year_index)
+
+# Fusió de potencials casos i controls
+dt_pre_matching<-
+  dt_dindex_cas %>% 
+  bind_rows(dt_dindex_cnt) %>% 
+  left_join(dt_pob_potencial,by="idp")
+
+```
+
+# Aplicació de matching
+
+- Aparellats per : UP, Any_naix, Sexe 
+- En mateixa visita: Any_visita
+
+- Exclusio previa: 
+* Potencials controls: Sense tractament antipsicotics (Qualsevol moment)
+* Event CV previ a data d'inclusió
+
+
+```{r eventCV_previ}
+#
+codis_ECV<-dt_cataleg %>% filter(ECV>0) %>% distinct(cod)
+
+#
+dt_temp<-
+  dt_problemes %>% semi_join(codis_ECV,by="cod") %>% group_by(idp) %>% slice(which.min(dat)) %>% ungroup() %>% 
+  transmute(idp,datECV=dat)
+
+dt_pre_matching<-dt_pre_matching %>% left_join(dt_temp,by="idp")
+
+
+# Excloc idps amb antecedents de ECV anteriors  <  year_index
+dt_pre_matching<-
+  dt_pre_matching %>% filter(substr(datECV,1,4)>year_index | is.na(datECV)) 
+
+
+
+```
+## Opció selecciono Només 1 control - Any
+
+Per optimitzar procés fem aleatori dins de visites 
+
+```{r}
+
+gc()
+set.seed(123)
+dt_pre_matching<-dt_pre_matching %>% group_by(idp) %>% slice_sample(n=1) %>% ungroup() 
+
+
+```
+
+
+
+## Matching
+
+```{r testmostra,eval=FALSE}
+
+dt_temp2 <- dt_pre_matching %>% sample_n(5000)
+
+m.out2<- 
+  MatchIt::matchit(grup ~ idup + year_index + dnaix +sexe, 
+                   distance = "glm",
+                   caliper = .25,
+                   exact = ~ idup + year_index + sexe, 
+                   ratio = 1,
+                   unit.id="idp",
+                   data = dt_temp2)
+
+m.out2
+
+pp<-MatchIt::get_matches(m.out2)
+
+
+
+
+```
+
+
+
+```{r matching, warning=FALSE}
+gc()
+# dt_pre_matching<-dt_pre_matching %>% mutate(year_naix=stringr::str_sub(dnaix,1,4) %>% as.numeric())
+
+# dt_temp2 <- dt_pre_matching %>% sample_n(5000)
+
+dt_temp <- dt_pre_matching 
+
+set.seed(123)
+m.out<- 
+  MatchIt::matchit(grup~ idup + year_index + dnaix + sexe, 
+                   distance = "glm",
+                   caliper = .25,
+                   exact = ~ idup + year_index + sexe, 
+                   ratio = 1,
+                   unit.id="idp",
+                   data = dt_temp)
+
+# ?MatchIt::matchit
+# quickmatch::quickmatch()
+# dt_temp %>% distinct(idup)
+m.out
+
+dades_match<-MatchIt::get_matches(m.out)
+
+# Assigno data index a 15/06/year
+dt_dataindex<-dades_match %>% transmute(idp,dtindex=paste0(year_index,"0615") %>% as.integer())
+
+
+```
+
+
+# Generació data index (Data index) II
+
+> Primera data visita entre 2007-2010 
+
+```{r, eval=FALSE}
+
+# 1a data de visita entre 2007-2010
+
+dt_dataindex<-dt_visites %>% group_by(idp) %>% slice(which.min(dat)) %>% ungroup() %>% select(idp,dtindex=dat)
+
+
+
+```
+
+# Generació data index (Data index) I
 
 > Data més recent entre 2007-2010 amb informació necessaria per al calcul de Escala qrisk (Determinacions o problemes de salut) 
 > Inclusió : 1 visita entre 2007-2010
@@ -64,7 +289,7 @@ dt_cataleg<-read_excel(conductor_cataleg)
 
 
 
-```{r}
+```{r, eval=F}
 # Selecciono agr tal info_data_inclusio==1 per tal de seleccionar data index
 codis_data_inclusio<-dt_cataleg %>% filter(info_data_inclusio==1) %>% select(cod,agr) %>% unique()
 
@@ -115,7 +340,8 @@ dtid_analitiques<-agregar_analitiques(dt_analitiqu,bd.dindex = dt_dataindex,fine
 # Agregar problemes de salut 
 
 
-dt_temp <- read_excel(conductor_cataleg) %>% filter(domini=="diagnostics")
+
+dt_temp <- read_conductor(conductor_cataleg) %>% filter(domini=="diagnostics")
 dtid_problemes<-agregar_problemes(dt=dt_problemes,bd.dindex = dt_dataindex,dt.agregadors =dt_temp ,finestra.dies = c(-Inf,0),prefix = "DG.",camp_agregador = "agr",keep.code = F,cataleg_mana = T)
 
 
@@ -175,7 +401,7 @@ dt_PAS_SD<-
 
 # Agregar facturats
 
-```{r}
+```{r, warning=FALSE}
 
 # Formatar dt_facturats (datainici i datafi) i eliminar solapaments 
 dt_facturats<-dt_facturats %>% mutate(dataini=paste0(as.character(dat),"15"),
@@ -199,7 +425,7 @@ dt_farmacs_grups<-
   split(.$cod)
 
 dt_farmacs_facturats<-dt_farmacs_grups %>%
-  map_dfr(~agregar_solapaments_gaps(dt=.x,id="idp",datainici="dataini",datafinal="datafi",gap=60,sel=T),.id="cod")
+  purrr::map_dfr(~agregar_solapaments_gaps(dt=.x,id="idp",datainici="dataini",datafinal="datafi",gap=60,sel=T),.id="cod")
 
 dt_farmacs_facturats <- dt_farmacs_facturats %>% mutate(dat=dataini,dbaixa=datafi) 
 
@@ -257,7 +483,16 @@ dtid_tabaquism<-agregar_analitiques(dt_tabaquism,bd.dindex = dt_dataindex,finest
 
 dt_visites<-dt_visites %>% mutate(cod=as.character(cod)) %>%  left_join(transmute(dt_cataleg,cod,agr2),by="cod") %>% transmute(idp,cod=agr2,dat)
 
-dtid_visites<-agregar_visites(dt=dt_visites,bd.dindex=dt_dataindex,finestra.dies = c(-365,0)) 
+dtid_visites<-dt_visites %>% mutate(val=1) %>% agregar_analitiques(bd.dindex=dt_dataindex,finestra.dies = c(-365,0),fun = "sum") 
+
+# Renombrar
+names(dtid_visites)<- c("idp","dtindex","visites_VIS_INF","visites_VIS_MF","visites_VIS_MGRESI","visites_VIS_MGURG")
+
+dtid_visites<-dtid_visites %>% select(c("idp","dtindex","visites_VIS_INF","visites_VIS_MF","visites_VIS_MGRESI","visites_VIS_MGURG"))
+
+# dtid_visites<-agregar_visites(dt=dt_visites,bd.dindex=dt_dataindex,finestra.dies = c(-365,0)) 
+
+
 
 
 # Recode 0->NA
@@ -293,6 +528,16 @@ dt_total<-
   left_join(select(dtid_prescrits2,-dtindex),by="idp") %>% 
   left_join(select(dtid_visites,-dtindex),by="idp") %>% 
   left_join(dt_PAS_SD,by="idp")
+
+
+```
+
+
+```{r juntar_dades_match}
+
+dt_total<-
+  dades_match %>% select(id,subclass,idp,grup,year_index,dtTMS) %>% 
+  left_join(dt_total,by="idp")
 
 
 ```
