@@ -2,7 +2,7 @@
 title: "Predicció del risc cardiovascular mitjançant dos escales en pacients  amb trastorn mental sever: estudi de cohorts retrospectiu"
 
 params:
-  fitxers_test: TRUE
+  fitxers_test: FALSE
 
 ---
 
@@ -57,12 +57,6 @@ dt_cataleg<-read_conductor(conductor_cataleg)
 
 ```
 
-
-```{r}
-
-
-
-```
 
 
 # NOVA Generació data index (Data index) III
@@ -216,7 +210,7 @@ dt_pre_matching<-dt_pre_matching %>% group_by(idp) %>% slice_sample(n=1) %>% ung
 dt_temp2 <- dt_pre_matching %>% sample_n(5000)
 
 m.out2<- 
-  MatchIt::matchit(grup ~ idup + year_index + dnaix +sexe, 
+  MatchIt::matchit(grup ~ dnaix, 
                    distance = "glm",
                    caliper = .25,
                    exact = ~ idup + year_index + sexe, 
@@ -227,8 +221,6 @@ m.out2<-
 m.out2
 
 pp<-MatchIt::get_matches(m.out2)
-
-
 
 
 ```
@@ -243,9 +235,10 @@ gc()
 
 dt_temp <- dt_pre_matching 
 
+
 set.seed(123)
 m.out<- 
-  MatchIt::matchit(grup~ idup + year_index + dnaix + sexe, 
+  MatchIt::matchit(grup~ dnaix, 
                    distance = "glm",
                    caliper = .25,
                    exact = ~ idup + year_index + sexe, 

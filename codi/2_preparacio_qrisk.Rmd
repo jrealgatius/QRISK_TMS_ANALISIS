@@ -582,14 +582,16 @@ dades<-dades %>% mutate(incl_matching=if_else(incl_matching==1,1,0,missing = 0))
 ```{r preparacio, include=FALSE}
 
 
+dt_temp<-dades
+
 # Preparació residual ECV i temps
 
 # Event CVD 
-dades<-dades %>% mutate(EV.CVD=pmin(EV.CI,EV.AVC_ISQ,EV.AIT,na.rm = T))
+dt_temp<-dt_temp %>% mutate(EV.CVD=pmin(EV.CI,EV.AVC_ISQ,EV.AIT,na.rm = T))
 
 # Calculo variable temps lliure d'EVENT i dicotomitzo variables event
-dades<-
-  dades %>% mutate_at(vars(starts_with("EV.")),list("temps"=~((ymd(.)-ymd(dtindex)) %>% as.numeric))) %>% 
+dt_temp<-
+  dt_temp %>% mutate_at(vars(starts_with("EV.")),list("temps"=~((ymd(.)-ymd(dtindex)) %>% as.numeric))) %>% 
           mutate_at(vars(ends_with("_temps")),~if_else(is.na(.),(ymd(sortida)-ymd(dtindex)) %>% as.numeric,.)) %>%
           mutate_at(vars(ends_with("_temps")),~./365.25) %>%
           mutate_at(vars(starts_with("EV.") & !ends_with("_temps")),~if_else(.>0,1,0,missing = 0))
@@ -598,21 +600,23 @@ dades<-
 # dades %>% select(extreure.variables("events",conductor_variables))
 
 # Exitus durant seguiment
-dades<-dades %>% mutate(exitus=if_else(situacio=="D",1,0))
+dt_temp<-dt_temp %>% mutate(exitus=if_else(situacio=="D",1,0))
 
 
 # Generar variable que computi combinacions de variables 
 
-dades<-
-  comptar_valors(dades,variables =extreure.variables("TMS",conductor_variables),"Yes") %>% 
+dt_temp<-
+  comptar_valors(dt_temp,variables =extreure.variables("TMS",conductor_variables),"Yes") %>% 
   rename(N_TMS=num_valors)
 
-# grups d'edat
-dades<-dades %>% recodificar(conductor_variables,criteris = "recode")
+# # # grups d'edat
+# dt_temp<-dt_temp %>% recodificar(conductor_variables,criteris = "recode", camp="camp")
 
 # mes grups d'edat
-dades<-dades %>% mutate(edat_grup=Hmisc::cut2(edat,g=10),
-                        agrupacio=paste0(sexe,": ",edat.cat7))
+dt_temp<-dt_temp %>% mutate(edat_grup=Hmisc::cut2(edat,g=10))
+
+
+dades<-dt_temp
 
 
 ```

@@ -342,5 +342,30 @@ funcio_kappa<-function(dt=dades) {
   }
 
 
+taula_HR_cases<-function(x_event="EV.CVD",x_temps="EV.CVD_temps",dt=dt_temp) {
+  
+  # x_event="EV.CVD",x_temps="EV.CVD_temps"
+  
+  # x_event="EV.AIT"
+  # x_temps="EV.AIT_temps"
+  # dt=dt_temp %>% filter(regicor>=0 & QRISK3_2017>=0)
+  
+  sym_event=sym(x_event)
+  sym_temps=sym(x_temps)
+  
+  formu1<-paste0("Surv(",x_temps,",",x_event,") ~ grup") %>% as.formula()
+  modelQrisk<-try(coxph(formu1,data=dt))
+  
+  if (is.na(modelQrisk$coefficients)) {
+    modelQrisk<-tibble(Parameter="grup",SE=NA,Coefficient=NA,CI_low=NA,CI_high=NA,p=NA,z=NA,df_error=NA) } else {
+      modelQrisk<-modelQrisk %>% parameters::parameters(exponentiate =T) %>% as_tibble() }
+  
+  modelQrisk %>% select(-c(SE,z,df_error)) %>% rename(HR=Coefficient) %>% mutate(Event=x_event) %>% relocate(Event)
+  }
+
+
+
+
+
 
 
